@@ -1,0 +1,21 @@
+{
+  "name": "vcore-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Interactive CLI demo for VCore",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx src/main.ts",
+    "start:openai": "npx tsx src/main.ts --openai",
+    "build": "echo 'no build needed'",
+    "clean": "echo 'nothing to clean'"
+  },
+  "dependencies": {
+    "vcore": "*",
+    "vcore-embedder-local": "*",
+    "vcore-embedder-openai": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
+}
