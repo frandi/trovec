@@ -113,7 +113,15 @@ await addWithText(db, { id: 'doc2', text: 'Dogs love to play fetch' });
 const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 ```
 
-> **No built-in embedder is included** — this keeps VCore zero-dependency. See [Writing an Embedder Adapter](#writing-an-embedder-adapter) below for how to create your own.
+> **No built-in embedder is included** — this keeps VCore zero-dependency. Available adapters:
+>
+> | Adapter | Dimensions | Notes |
+> |---------|-----------|-------|
+> | [`vcore-embedder-local`](../vcore-embedder-local/) | 64 | Trigram hash, zero deps, offline — for testing/demos |
+> | [`vcore-embedder-ollama`](../vcore-embedder-ollama/) | 768 | Local Ollama server, no API key — good semantic quality |
+> | [`vcore-embedder-openai`](../vcore-embedder-openai/) | 1536 | OpenAI API — best semantic quality |
+>
+> See [Writing an Embedder Adapter](#writing-an-embedder-adapter) below for how to create your own.
 
 ## API Reference
 

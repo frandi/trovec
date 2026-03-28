@@ -14,6 +14,7 @@ import {
 import type { VCoreInstance, Embedder } from 'vcore';
 import { createLocalEmbedder } from 'vcore-embedder-local';
 import { createOpenAIEmbedder } from 'vcore-embedder-openai';
+import { createOllamaEmbedder } from 'vcore-embedder-ollama';
 
 // ─── ANSI Helpers ─────────────────────────────────────────────────────────────
 
@@ -106,6 +107,7 @@ const QUERIES = [
 
 async function main() {
   const useOpenAI = process.argv.includes('--openai');
+  const useOllama = process.argv.includes('--ollama');
   const DIMENSIONS = 64;
 
   banner();
@@ -127,12 +129,17 @@ async function main() {
       embedder = createOpenAIEmbedder({ apiKey, model: 'text-embedding-3-small' });
       embedderName = 'OpenAI (text-embedding-3-small)';
     }
+  } else if (useOllama) {
+    embedder = createOllamaEmbedder({ model: 'nomic-embed-text' });
+    embedderName = 'Ollama (nomic-embed-text)';
   } else {
     embedder = createLocalEmbedder({ dimensions: DIMENSIONS, warn: false });
     embedderName = 'Local (trigram hash)';
   }
 
-  const dimensions = embedderName.startsWith('OpenAI') ? 1536 : DIMENSIONS;
+  const dimensions = embedderName.startsWith('OpenAI') ? 1536
+    : embedderName.startsWith('Ollama') ? 768
+    : DIMENSIONS;
   const driver = createMemoryDriver();
 
   const db = create({
@@ -257,8 +264,9 @@ async function main() {
   console.log();
   console.log(`${INDENT}${c.bgGreen}${c.bold} DONE ${c.reset} ${c.green}Demo completed successfully.${c.reset}`);
 
-  if (!useOpenAI) {
+  if (!useOpenAI && !useOllama) {
     console.log(`${INDENT}${c.dim}Tip: Run with --openai flag and set OPENAI_API_KEY for real embeddings.${c.reset}`);
+    console.log(`${INDENT}${c.dim}Tip: Run with --ollama flag for local Ollama embeddings (requires running Ollama server).${c.reset}`);
   }
 
   console.log();

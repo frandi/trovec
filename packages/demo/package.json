@@ -7,13 +7,15 @@
   "scripts": {
     "start": "npx tsx src/main.ts",
     "start:openai": "node --env-file=.env --import tsx src/main.ts --openai",
+    "start:ollama": "npx tsx src/main.ts --ollama",
     "build": "echo 'no build needed'",
     "clean": "echo 'nothing to clean'"
   },
   "dependencies": {
     "vcore": "*",
     "vcore-embedder-local": "*",
-    "vcore-embedder-openai": "*"
+    "vcore-embedder-openai": "*",
+    "vcore-embedder-ollama": "*"
   },
   "devDependencies": {
     "tsx": "^4.0.0"

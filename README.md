@@ -9,6 +9,7 @@ A lightweight, zero-dependency vector database ecosystem for Node.js.
 | [`vcore`](packages/vcore/) | Core vector database library | [![npm](https://img.shields.io/npm/v/vcore)](https://www.npmjs.com/package/vcore) |
 | [`vcore-embedder-local`](packages/vcore-embedder-local/) | Zero-dependency local embedder (testing/demos) | [![npm](https://img.shields.io/npm/v/vcore-embedder-local)](https://www.npmjs.com/package/vcore-embedder-local) |
 | [`vcore-embedder-openai`](packages/vcore-embedder-openai/) | OpenAI embeddings adapter | [![npm](https://img.shields.io/npm/v/vcore-embedder-openai)](https://www.npmjs.com/package/vcore-embedder-openai) |
+| [`vcore-embedder-ollama`](packages/vcore-embedder-ollama/) | Ollama local embeddings adapter | [![npm](https://img.shields.io/npm/v/vcore-embedder-ollama)](https://www.npmjs.com/package/vcore-embedder-ollama) |
 
 ## Quick Start
 
@@ -18,6 +19,9 @@ npm install vcore
 
 # With local embedder (no API key needed — great for trying out VCore)
 npm install vcore vcore-embedder-local
+
+# With Ollama embeddings (local, no API key needed — requires running Ollama server)
+npm install vcore vcore-embedder-ollama
 
 # With OpenAI embeddings (production-quality semantic search)
 npm install vcore vcore-embedder-openai
@@ -47,6 +51,7 @@ vcore/
     vcore/                 Core library
     vcore-embedder-local/  Local embedder (testing/demos)
     vcore-embedder-openai/ OpenAI embeddings adapter
+    vcore-embedder-ollama/ Ollama local embeddings adapter
     demo/                  Interactive CLI demo
 ```
 

@@ -13,8 +13,11 @@ Interactive CLI demo that showcases VCore's core capabilities: embedding, storag
 # Default — uses local embedder, no API key needed
 npm start
 
-# With OpenAI embeddings (requires OPENAI_API_KEY)
-OPENAI_API_KEY=sk-... npm run start:openai
+# With OpenAI embeddings (requires OPENAI_API_KEY in .env)
+npm run start:openai
+
+# With Ollama embeddings (requires running Ollama server)
+npm run start:ollama
 ```
 
 ## What the Demo Does
@@ -37,6 +40,7 @@ The demo walks through 7 steps in sequence:
 |------|------|------------|-------|
 | Local | *(default)* | 64 | Trigram hash-based, zero dependencies, fully offline |
 | OpenAI | `--openai` | 1536 | Uses `text-embedding-3-small`, falls back to local if `OPENAI_API_KEY` is not set |
+| Ollama | `--ollama` | 768 | Uses `nomic-embed-text`, requires a running [Ollama](https://ollama.com/) server (see [setup guide](../../docs/ollama.md)) |
 
 ### What to Expect from Each Mode
 
@@ -48,7 +52,22 @@ The **OpenAI embedder** produces significantly better results:
 - **Better score separation** — clear gap between relevant and irrelevant results, making top-K cutoffs more meaningful
 - **No negative scores** — local can produce negative cosine scores (essentially noise), while OpenAI scores are positive and well-distributed
 
-The trade-off is **speed**: local embeds in <1ms per document, while OpenAI takes 200-700ms due to API round-trips. For development and CI, local is fine. For evaluating real search quality, use OpenAI.
+The **Ollama embedder** performs well and runs entirely locally:
+
+- **High similarity scores** — produces the highest absolute scores of all three modes (e.g. 0.72 vs 0.47 for "pets and animals")
+- **Good semantic ranking** — correctly groups related documents together, comparable to OpenAI
+- **Fast after warm-up** — first embed takes ~1-2s (model loading), subsequent embeds take ~20-35ms
+- **No API key needed** — fully private, no data leaves your machine
+
+### Speed vs Quality Summary
+
+| Mode | Embed Speed | Search Quality | Setup |
+|------|------------|----------------|-------|
+| Local | <1ms | Basic (trigram hash, some odd matches) | None |
+| Ollama | 20-35ms (after warm-up) | Good (semantic, strong score separation) | Ollama server |
+| OpenAI | 200-700ms | Best (semantic, cleanest separation) | API key |
+
+For development and CI, local is fine. For evaluating real search quality locally, use Ollama. For production-grade quality, use OpenAI.
 
 ## Sample Output
 
