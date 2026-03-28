@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "npx tsx src/main.ts",
-    "start:openai": "npx tsx src/main.ts --openai",
+    "start:openai": "node --env-file=.env --import tsx src/main.ts --openai",
     "build": "echo 'no build needed'",
     "clean": "echo 'nothing to clean'"
   },
