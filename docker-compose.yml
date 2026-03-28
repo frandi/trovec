@@ -1,0 +1,24 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vcore-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts/ollama-init.sh:/init.sh
+    entrypoint: ["bash", "/init.sh"]
+    environment:
+      - LLM_MODELS=llama3.2:1b,llama3.2:3b
+      - EMBEDDING_MODEL=nomic-embed-text
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
