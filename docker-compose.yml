@@ -1,7 +1,7 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: vcore-ollama
+    container_name: trovec-ollama
     ports:
       - "11434:11434"
     volumes:

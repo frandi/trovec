@@ -10,11 +10,11 @@ import {
   flush,
   deserialize,
   createMemoryDriver,
-} from 'vcore';
-import type { VCoreInstance, Embedder } from 'vcore';
-import { createLocalEmbedder } from 'vcore-embedder-local';
-import { createOpenAIEmbedder } from 'vcore-embedder-openai';
-import { createOllamaEmbedder } from 'vcore-embedder-ollama';
+} from '@trovec/core';
+import type { TrovecInstance, Embedder } from '@trovec/core';
+import { createLocalEmbedder } from '@trovec/embedder-local';
+import { createOpenAIEmbedder } from '@trovec/embedder-openai';
+import { createOllamaEmbedder } from '@trovec/embedder-ollama';
 
 // ─── ANSI Helpers ─────────────────────────────────────────────────────────────
 
@@ -41,7 +41,7 @@ const LINE = c.dim + '─'.repeat(WIDTH) + c.reset;
 function banner() {
   console.log();
   console.log(c.cyan + c.bold + '  ╔' + '═'.repeat(WIDTH - 2) + '╗' + c.reset);
-  console.log(c.cyan + c.bold + '  ║' + ' '.repeat(18) + 'VCore CLI Demo' + ' '.repeat(WIDTH - 34) + '║' + c.reset);
+  console.log(c.cyan + c.bold + '  ║' + ' '.repeat(18) + 'Trovec CLI Demo' + ' '.repeat(WIDTH - 34) + '║' + c.reset);
   console.log(c.cyan + c.bold + '  ║' + c.reset + c.cyan + ' '.repeat(10) + 'Vector Database Library for Node.js' + ' '.repeat(WIDTH - 47) + c.bold + '║' + c.reset);
   console.log(c.cyan + c.bold + '  ╚' + '═'.repeat(WIDTH - 2) + '╝' + c.reset);
   console.log();
@@ -114,7 +114,7 @@ async function main() {
 
   // ── Step 1: Initialize ──────────────────────────────────────────────────────
 
-  step(1, 'Initialize VCore Instance');
+  step(1, 'Initialize Trovec Instance');
 
   let embedder: Embedder;
   let embedderName: string;

@@ -385,7 +385,7 @@ function printComparison(modelResults: Map<string, BenchResult[]>): void {
 
 async function main(): Promise<void> {
   console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║          Ollama Benchmark — VCore                       ║');
+  console.log('║          Ollama Benchmark — Trovec                       ║');
   console.log('╠══════════════════════════════════════════════════════════╣');
   console.log(`║  Host:       ${BASE_URL.padEnd(42)}║`);
   console.log(`║  LLM:        ${LLM_MODELS.join(', ').padEnd(42)}║`);
