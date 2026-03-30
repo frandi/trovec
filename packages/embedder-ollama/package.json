@@ -27,7 +27,7 @@
     "build": "npm run build:esm && npm run build:cjs",
     "build:esm": "tsc -p tsconfig.esm.json && node -e \"fs.writeFileSync('dist/esm/package.json','{\\\"type\\\":\\\"module\\\"}')\"",
     "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"fs.writeFileSync('dist/cjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\"",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run clean && npm run build && npm test"
@@ -44,6 +44,14 @@
     "local"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frandi/trovec.git",
+    "directory": "packages/embedder-ollama"
+  },
   "peerDependencies": {
     "@trovec/core": "^1.0.0"
   },
