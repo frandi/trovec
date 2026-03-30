@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trovec PDF RAG - POC</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f7fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+    }
+    .container { max-width: 800px; margin: 0 auto; padding: 2rem 1rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+
+    /* Status bar */
+    .status-bar {
+      display: flex; gap: 1rem; align-items: center;
+      background: #e8f4f8; border-radius: 8px; padding: 0.75rem 1rem;
+      margin-bottom: 1.5rem; font-size: 0.85rem;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #2ecc71; flex-shrink: 0;
+    }
+    .status-dot.empty { background: #95a5a6; }
+
+    /* Upload section */
+    .upload-section {
+      background: #fff; border-radius: 12px; padding: 1.5rem;
+      margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .upload-area {
+      border: 2px dashed #ccd; border-radius: 8px; padding: 2rem;
+      text-align: center; cursor: pointer; transition: border-color 0.2s;
+    }
+    .upload-area:hover, .upload-area.dragover { border-color: #4a90d9; background: #f0f6ff; }
+    .upload-area input { display: none; }
+    .upload-area p { color: #666; font-size: 0.9rem; }
+    .upload-area .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .upload-progress {
+      margin-top: 1rem; padding: 0.75rem; background: #f0f6ff;
+      border-radius: 6px; font-size: 0.85rem; display: none;
+    }
+    .upload-progress.show { display: block; }
+    .upload-progress.error { background: #ffeaea; color: #c0392b; }
+    .upload-progress.success { background: #eafff0; color: #27ae60; }
+
+    /* Ask section */
+    .ask-section {
+      background: #fff; border-radius: 12px; padding: 1.5rem;
+      margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .ask-form {
+      display: flex; gap: 0.5rem;
+    }
+    .ask-form input {
+      flex: 1; padding: 0.7rem 1rem; border: 1px solid #ddd;
+      border-radius: 8px; font-size: 0.95rem; outline: none;
+    }
+    .ask-form input:focus { border-color: #4a90d9; box-shadow: 0 0 0 2px rgba(74,144,217,0.15); }
+    .ask-form button {
+      padding: 0.7rem 1.5rem; background: #4a90d9; color: #fff;
+      border: none; border-radius: 8px; font-size: 0.95rem;
+      cursor: pointer; white-space: nowrap;
+    }
+    .ask-form button:hover { background: #357abd; }
+    .ask-form button:disabled { background: #95a5a6; cursor: not-allowed; }
+
+    /* Answer */
+    .answer-section {
+      background: #fff; border-radius: 12px; padding: 1.5rem;
+      margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      display: none;
+    }
+    .answer-section.show { display: block; }
+    .answer-text {
+      font-size: 0.95rem; line-height: 1.7; color: #333;
+      white-space: pre-wrap; word-break: break-word;
+    }
+    .answer-text .cite {
+      display: inline-block; background: #4a90d9; color: #fff;
+      font-size: 0.7rem; font-weight: 600; padding: 0.1rem 0.4rem;
+      border-radius: 4px; vertical-align: super; cursor: pointer;
+      text-decoration: none; margin: 0 1px;
+    }
+    .answer-text .cite:hover { background: #357abd; }
+
+    /* LLM usage info */
+    .llm-usage {
+      margin-top: 1rem; padding: 0.5rem 0; border-top: 1px solid #eee;
+      font-size: 0.72rem; color: #999; display: flex; gap: 1rem;
+    }
+
+    /* Citations */
+    .citations-section {
+      margin-top: 0.75rem; display: none;
+    }
+    .citations-section.show { display: block; }
+    .citations-header {
+      font-size: 0.8rem; font-weight: 600; color: #555;
+      text-transform: uppercase; letter-spacing: 0.03em;
+      margin-bottom: 0.5rem; cursor: pointer; user-select: none;
+    }
+    .citations-header:hover { color: #4a90d9; }
+    .citation-card {
+      background: #f8f9fb; border-radius: 8px; padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem; border-left: 3px solid #4a90d9;
+      font-size: 0.85rem;
+    }
+    .citation-card .citation-meta {
+      display: flex; gap: 0.75rem; align-items: center;
+      margin-bottom: 0.35rem; font-size: 0.78rem;
+    }
+    .citation-card .citation-num {
+      background: #4a90d9; color: #fff; width: 20px; height: 20px;
+      border-radius: 50%; display: flex; align-items: center;
+      justify-content: center; font-weight: 600; font-size: 0.68rem;
+      flex-shrink: 0;
+    }
+    .citation-card .citation-page { color: #4a90d9; font-weight: 600; }
+    .citation-card .citation-file { color: #888; }
+    .citation-card .citation-preview {
+      color: #555; line-height: 1.4; max-height: 80px;
+      overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+    }
+
+    .loading-indicator {
+      text-align: center; padding: 2rem; color: #888; font-size: 0.9rem;
+    }
+    .label {
+      font-size: 0.8rem; font-weight: 600; color: #555;
+      margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Trovec PDF RAG</h1>
+    <p class="subtitle">Proof of Concept &mdash; Ask questions about your PDF documents, powered by Trovec</p>
+
+    <div class="status-bar">
+      <div class="status-dot empty" id="statusDot"></div>
+      <span id="statusText">No documents indexed</span>
+    </div>
+
+    <div class="upload-section">
+      <div class="label">Upload PDF</div>
+      <div class="upload-area" id="uploadArea">
+        <div class="icon">&#128196;</div>
+        <p>Drop a PDF here or click to select</p>
+        <input type="file" id="fileInput" accept=".pdf">
+      </div>
+      <div class="upload-progress" id="uploadProgress"></div>
+    </div>
+
+    <div class="ask-section">
+      <div class="label">Ask a Question</div>
+      <form class="ask-form" id="askForm">
+        <input type="text" id="askInput" placeholder="Ask a question about your documents..." autocomplete="off">
+        <button type="submit" id="askBtn">Ask</button>
+      </form>
+    </div>
+
+    <div id="resultsArea">
+      <div class="answer-section" id="answerSection">
+        <div class="label">Answer</div>
+        <div class="answer-text" id="answerText"></div>
+        <div class="llm-usage" id="llmUsage"></div>
+        <div class="citations-section" id="citationsSection">
+          <div class="citations-header" id="citationsToggle">Sources</div>
+          <div id="citationsList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const askForm = document.getElementById('askForm');
+    const askInput = document.getElementById('askInput');
+    const askBtn = document.getElementById('askBtn');
+    const answerSection = document.getElementById('answerSection');
+    const answerText = document.getElementById('answerText');
+    const citationsSection = document.getElementById('citationsSection');
+    const citationsList = document.getElementById('citationsList');
+    const citationsToggle = document.getElementById('citationsToggle');
+    const resultsArea = document.getElementById('resultsArea');
+
+    // Upload handlers
+    uploadArea.addEventListener('click', () => fileInput.click());
+    uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+    uploadArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadArea.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) uploadFile(fileInput.files[0]);
+    });
+
+    async function uploadFile(file) {
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showProgress('Please select a PDF file.', 'error');
+        return;
+      }
+      showProgress(`Ingesting "${file.name}"... This may take a moment.`, '');
+
+      const formData = new FormData();
+      formData.append('pdf', file);
+
+      try {
+        const res = await fetch('/api/ingest', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        showProgress(`Indexed ${data.totalChunks} chunks from ${data.totalPages} pages of "${data.fileName}"`, 'success');
+        refreshStatus();
+      } catch (err) {
+        showProgress(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    function showProgress(msg, type) {
+      uploadProgress.textContent = msg;
+      uploadProgress.className = 'upload-progress show' + (type ? ` ${type}` : '');
+    }
+
+    // Ask
+    askForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const question = askInput.value.trim();
+      if (!question) return;
+
+      askBtn.disabled = true;
+      askBtn.textContent = 'Thinking...';
+      answerSection.classList.remove('show');
+      citationsSection.classList.remove('show');
+      resultsArea.innerHTML = '<div class="loading-indicator">Searching documents and generating answer...</div>';
+
+      try {
+        const res = await fetch('/api/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question, topK: 8 }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Ask failed');
+
+        resultsArea.innerHTML = '';
+        resultsArea.appendChild(answerSection);
+        renderAnswer(data);
+      } catch (err) {
+        resultsArea.innerHTML = `<div class="loading-indicator">Error: ${err.message}</div>`;
+      } finally {
+        askBtn.disabled = false;
+        askBtn.textContent = 'Ask';
+      }
+    });
+
+    function renderAnswer(data) {
+      // Render answer text with citation badges
+      let html = escapeHtml(data.answer);
+      html = html.replace(/\[(\d+)\]/g, (match, num) => {
+        return `<a class="cite" href="#cite-${num}" title="Source ${num}">${num}</a>`;
+      });
+      answerText.innerHTML = html;
+
+      // Render LLM usage
+      const llmUsage = document.getElementById('llmUsage');
+      if (data.usage) {
+        llmUsage.innerHTML = `<span>Model: ${escapeHtml(data.usage.model)}</span><span>Input: ${data.usage.inputTokens.toLocaleString()} tokens</span><span>Output: ${data.usage.outputTokens.toLocaleString()} tokens</span>`;
+      } else {
+        llmUsage.innerHTML = '';
+      }
+
+      // Render citations
+      if (data.citations && data.citations.length > 0) {
+        citationsList.innerHTML = data.citations.map((c) => `
+          <div class="citation-card" id="cite-${c.index}">
+            <div class="citation-meta">
+              <div class="citation-num">${c.index}</div>
+              <span class="citation-page">Page ${c.pageNumber}</span>
+              <span class="citation-file">${escapeHtml(c.sourceFile)}</span>
+            </div>
+            <div class="citation-preview">${escapeHtml(c.preview)}</div>
+          </div>
+        `).join('');
+        citationsSection.classList.add('show');
+      }
+
+      answerSection.classList.add('show');
+    }
+
+    // Toggle citations
+    let citationsExpanded = true;
+    citationsToggle.addEventListener('click', () => {
+      citationsExpanded = !citationsExpanded;
+      citationsList.style.display = citationsExpanded ? 'block' : 'none';
+      citationsToggle.textContent = citationsExpanded ? 'Sources' : 'Sources (click to expand)';
+    });
+
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
+    // Status
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const dot = document.getElementById('statusDot');
+        const text = document.getElementById('statusText');
+        if (data.entryCount > 0) {
+          dot.classList.remove('empty');
+          text.textContent = `${data.entryCount} chunk(s) indexed | ${data.dimensions}d ${data.metric} | ${data.quantization}`;
+        } else {
+          dot.classList.add('empty');
+          text.textContent = 'No documents indexed';
+        }
+      } catch {}
+    }
+
+    refreshStatus();
+  </script>
+</body>
+</html>
