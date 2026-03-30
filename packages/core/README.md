@@ -1,8 +1,8 @@
-# VCore
+# @trovec/core
 
 A lightweight, zero-dependency vector database library for Node.js. Store, query, and persist vector embeddings with support for multiple quantization types and similarity metrics.
 
-Built to the [VCore Specification (VCS-1) v1.0.1](docs/spec.md).
+Built to the [Trovec Specification (VCS-1) v1.0.1](docs/spec.md).
 
 ## Features
 
@@ -20,13 +20,13 @@ Built to the [VCore Specification (VCS-1) v1.0.1](docs/spec.md).
 ### Installation
 
 ```bash
-npm install vcore
+npm install @trovec/core
 ```
 
 ### Basic Usage
 
 ```typescript
-import { create, add, query } from 'vcore';
+import { create, add, query } from '@trovec/core';
 
 // 1. Create an instance
 const db = create({ dimensions: 3 });
@@ -49,7 +49,7 @@ console.log(results);
 ### With Quantization and Filtering
 
 ```typescript
-import { create, addMany, query } from 'vcore';
+import { create, addMany, query } from '@trovec/core';
 
 const db = create({
   dimensions: 128,
@@ -75,8 +75,8 @@ const results = query(db, {
 ### Persistence
 
 ```typescript
-import { create, add, flush, deserialize } from 'vcore';
-import { createMemoryDriver } from 'vcore';
+import { create, add, flush, deserialize } from '@trovec/core';
+import { createMemoryDriver } from '@trovec/core';
 
 const driver = createMemoryDriver();
 const db = create({ dimensions: 3, storageDriver: driver });
@@ -94,11 +94,11 @@ if (buffer) deserialize(buffer, db2);
 
 ### Text Embedding (with adapter)
 
-VCore provides an `Embedder` interface for text-to-vector conversion. Install an adapter package, then use text-based convenience functions:
+Trovec provides an `Embedder` interface for text-to-vector conversion. Install an adapter package, then use text-based convenience functions:
 
 ```typescript
-import { create, addWithText, queryByText } from 'vcore';
-import { createOpenAIEmbedder } from 'vcore-embedder-openai'; // adapter package
+import { create, addWithText, queryByText } from '@trovec/core';
+import { createOpenAIEmbedder } from '@trovec/embedder-openai'; // adapter package
 
 const db = create({
   dimensions: 1536,
@@ -113,13 +113,13 @@ await addWithText(db, { id: 'doc2', text: 'Dogs love to play fetch' });
 const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 ```
 
-> **No built-in embedder is included** — this keeps VCore zero-dependency. Available adapters:
+> **No built-in embedder is included** — this keeps Trovec zero-dependency. Available adapters:
 >
 > | Adapter | Dimensions | Notes |
 > |---------|-----------|-------|
-> | [`vcore-embedder-local`](../vcore-embedder-local/) | 64 | Trigram hash, zero deps, offline — for testing/demos |
-> | [`vcore-embedder-ollama`](../vcore-embedder-ollama/) | 768 | Local Ollama server, no API key — good semantic quality |
-> | [`vcore-embedder-openai`](../vcore-embedder-openai/) | 1536 | OpenAI API — best semantic quality |
+> | [`@trovec/embedder-local`](../embedder-local/) | 64 | Trigram hash, zero deps, offline — for testing/demos |
+> | [`@trovec/embedder-ollama`](../embedder-ollama/) | 768 | Local Ollama server, no API key — good semantic quality |
+> | [`@trovec/embedder-openai`](../embedder-openai/) | 1536 | OpenAI API — best semantic quality |
 >
 > See [Writing an Embedder Adapter](#writing-an-embedder-adapter) below for how to create your own.
 
@@ -129,9 +129,9 @@ const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `create` | `(config: VCoreConfig) => VCoreInstance` | Create a new instance |
-| `flush` | `(instance: VCoreInstance) => Promise<void>` | Persist all data to storage |
-| `stats` | `(instance: VCoreInstance) => VCoreStats` | Get instance statistics |
+| `create` | `(config: TrovecConfig) => TrovecInstance` | Create a new instance |
+| `flush` | `(instance: TrovecInstance) => Promise<void>` | Persist all data to storage |
+| `stats` | `(instance: TrovecInstance) => TrovecStats` | Get instance statistics |
 
 ### Collection Operations
 
@@ -163,12 +163,12 @@ const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 | `addManyWithText` | `(instance, entries: TextEntry[]) => Promise<void>` | Batch embed and add entries |
 | `queryByText` | `(instance, params: TextQueryParams) => Promise<QueryResult[]>` | Embed query text and search |
 
-All functions throw `VCoreError` if no embedder is configured.
+All functions throw `TrovecError` if no embedder is configured.
 
 ### Configuration
 
 ```typescript
-interface VCoreConfig {
+interface TrovecConfig {
   dimensions: number;                  // required: vector dimensionality
   quantization?: 'F32' | 'INT8' | 'BIT';  // default: 'F32'
   metric?: 'cosine' | 'euclidean' | 'dot' | 'hamming'; // default: 'cosine'
@@ -185,7 +185,7 @@ interface VCoreConfig {
 src/
   index.ts                   Public API barrel export
   types.ts                   All type definitions
-  errors.ts                  VCoreError, DimensionMismatchError, InvalidConfigError
+  errors.ts                  TrovecError, DimensionMismatchError, InvalidConfigError
   validation.ts              Config/embedding validation, ID serialization
   core.ts                    create(), flush(), stats()
   collection.ts              add(), addMany(), delete(), get()
@@ -237,7 +237,7 @@ Three extension points are available:
 An embedder adapter is any object that implements the `Embedder` interface:
 
 ```typescript
-import type { Embedder, EmbedResult } from 'vcore';
+import type { Embedder, EmbedResult } from '@trovec/core';
 
 export function createMyEmbedder(options: { apiKey: string }): Embedder {
   return {
@@ -254,7 +254,7 @@ export function createMyEmbedder(options: { apiKey: string }): Embedder {
 }
 ```
 
-Publish as a separate package (e.g., `vcore-embedder-mymodel`) to keep VCore zero-dependency.
+Publish as a separate package (e.g., `@trovec/embedder-mymodel`) to keep Trovec zero-dependency.
 
 ## Development
 

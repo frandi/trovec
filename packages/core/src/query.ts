@@ -1,7 +1,7 @@
-import type { VCoreInstance, QueryParams, QueryResult } from './types.js';
+import type { TrovecInstance, QueryParams, QueryResult } from './types.js';
 import { validateEmbedding, compareIds } from './validation.js';
 
-export function query(instance: VCoreInstance, params: QueryParams): QueryResult[] {
+export function query(instance: TrovecInstance, params: QueryParams): QueryResult[] {
   validateEmbedding(params.vector, instance.config.dimensions);
 
   const topK = params.topK ?? 10;

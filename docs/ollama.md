@@ -1,6 +1,6 @@
 # Ollama Local AI Setup
 
-This guide covers how to run the Ollama container that provides a local LLM and embedding model for VCore development.
+This guide covers how to run the Ollama container that provides a local LLM and embedding model for Trovec development.
 
 ## Prerequisites
 
@@ -103,7 +103,7 @@ Verify your GPU is accessible from Docker:
 nvidia-smi
 
 # After starting the container, check the logs for GPU detection
-docker logs vcore-ollama 2>&1 | grep -i "gpu\|cuda\|nvidia"
+docker logs trovec-ollama 2>&1 | grep -i "gpu\|cuda\|nvidia"
 ```
 
 You should see a line like:
@@ -201,19 +201,19 @@ docker compose up -d
 docker compose down
 
 # View logs
-docker logs -f vcore-ollama
+docker logs -f trovec-ollama
 
 # Restart (e.g. after changing models)
 docker compose down && docker compose up -d
 
 # Pull a model manually
-docker exec vcore-ollama ollama pull mistral
+docker exec trovec-ollama ollama pull mistral
 
 # List downloaded models
-docker exec vcore-ollama ollama list
+docker exec trovec-ollama ollama list
 
 # Remove a model
-docker exec vcore-ollama ollama rm llama3.2:1b
+docker exec trovec-ollama ollama rm llama3.2:1b
 
 # Reset everything (removes all downloaded models)
 docker compose down -v
@@ -227,7 +227,7 @@ Your machine may not have the NVIDIA Container Toolkit installed, or doesn't hav
 **Models fail to download**
 Check your internet connection. The container needs outbound access to pull models from `registry.ollama.ai`. You can also check the logs:
 ```bash
-docker logs vcore-ollama
+docker logs trovec-ollama
 ```
 
 **Port 11434 already in use**

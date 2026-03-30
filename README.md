@@ -1,4 +1,4 @@
-# VCore
+# Trovec
 
 A lightweight, zero-dependency vector database ecosystem for Node.js.
 
@@ -6,29 +6,29 @@ A lightweight, zero-dependency vector database ecosystem for Node.js.
 
 | Package | Description | npm |
 |---------|-------------|-----|
-| [`vcore`](packages/vcore/) | Core vector database library | [![npm](https://img.shields.io/npm/v/vcore)](https://www.npmjs.com/package/vcore) |
-| [`vcore-embedder-local`](packages/vcore-embedder-local/) | Zero-dependency local embedder (testing/demos) | [![npm](https://img.shields.io/npm/v/vcore-embedder-local)](https://www.npmjs.com/package/vcore-embedder-local) |
-| [`vcore-embedder-openai`](packages/vcore-embedder-openai/) | OpenAI embeddings adapter | [![npm](https://img.shields.io/npm/v/vcore-embedder-openai)](https://www.npmjs.com/package/vcore-embedder-openai) |
-| [`vcore-embedder-ollama`](packages/vcore-embedder-ollama/) | Ollama local embeddings adapter | [![npm](https://img.shields.io/npm/v/vcore-embedder-ollama)](https://www.npmjs.com/package/vcore-embedder-ollama) |
+| [`@trovec/core`](packages/core/) | Core vector database library | [![npm](https://img.shields.io/npm/v/@trovec/core)](https://www.npmjs.com/package/@trovec/core) |
+| [`@trovec/embedder-local`](packages/embedder-local/) | Zero-dependency local embedder (testing/demos) | [![npm](https://img.shields.io/npm/v/@trovec/embedder-local)](https://www.npmjs.com/package/@trovec/embedder-local) |
+| [`@trovec/embedder-openai`](packages/embedder-openai/) | OpenAI embeddings adapter | [![npm](https://img.shields.io/npm/v/@trovec/embedder-openai)](https://www.npmjs.com/package/@trovec/embedder-openai) |
+| [`@trovec/embedder-ollama`](packages/embedder-ollama/) | Ollama local embeddings adapter | [![npm](https://img.shields.io/npm/v/@trovec/embedder-ollama)](https://www.npmjs.com/package/@trovec/embedder-ollama) |
 
 ## Quick Start
 
 ```bash
 # Core library only (bring your own vectors)
-npm install vcore
+npm install @trovec/core
 
-# With local embedder (no API key needed — great for trying out VCore)
-npm install vcore vcore-embedder-local
+# With local embedder (no API key needed — great for trying out Trovec)
+npm install @trovec/core @trovec/embedder-local
 
 # With Ollama embeddings (local, no API key needed — requires running Ollama server)
-npm install vcore vcore-embedder-ollama
+npm install @trovec/core @trovec/embedder-ollama
 
 # With OpenAI embeddings (production-quality semantic search)
-npm install vcore vcore-embedder-openai
+npm install @trovec/core @trovec/embedder-openai
 ```
 
 ```typescript
-import { create, add, query } from 'vcore';
+import { create, add, query } from '@trovec/core';
 
 const db = create({ dimensions: 3 });
 add(db, { id: 'cat', embedding: [0.9, 0.1, 0.0], context: { type: 'animal' } });
@@ -43,15 +43,15 @@ See each package's README for detailed documentation.
 ## Repository Structure
 
 ```
-vcore/
+trovec/
   package.json             Root workspace config (private)
   tsconfig.base.json       Shared TypeScript options
   vitest.config.ts         Runs tests across all packages
   packages/
-    vcore/                 Core library
-    vcore-embedder-local/  Local embedder (testing/demos)
-    vcore-embedder-openai/ OpenAI embeddings adapter
-    vcore-embedder-ollama/ Ollama local embeddings adapter
+    core/                  Core library
+    embedder-local/        Local embedder (testing/demos)
+    embedder-openai/       OpenAI embeddings adapter
+    embedder-ollama/       Ollama local embeddings adapter
     demo/                  Interactive CLI demo
 ```
 
@@ -65,13 +65,13 @@ npm test                        # run all tests across all packages
 npm run build --workspaces      # build all packages
 
 # Per-package commands
-npm test --workspace=packages/vcore
-npm run build --workspace=packages/vcore-embedder-openai
+npm test --workspace=packages/core
+npm run build --workspace=packages/embedder-openai
 ```
 
 ## Writing an Adapter
 
-VCore's `Embedder` interface is the extension point for text-to-vector conversion. See the [adapter guide](packages/vcore/README.md#writing-an-embedder-adapter) in the core README or use `vcore-embedder-openai` as a reference implementation.
+Trovec's `Embedder` interface is the extension point for text-to-vector conversion. See the [adapter guide](packages/core/README.md#writing-an-embedder-adapter) in the core README or use `@trovec/embedder-openai` as a reference implementation.
 
 ## License
 

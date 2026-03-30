@@ -1,4 +1,4 @@
-import type { VCoreInstance, QuantizationType, MetricType, EntryId, QuantizedVector } from './types.js';
+import type { TrovecInstance, QuantizationType, MetricType, EntryId, QuantizedVector } from './types.js';
 
 // Binary format:
 // Header (16 bytes):
@@ -99,7 +99,7 @@ function readQuantizedData(buf: Buffer, offset: number, quantization: Quantizati
   }
 }
 
-export function serialize(instance: VCoreInstance): Buffer {
+export function serialize(instance: TrovecInstance): Buffer {
   const { dimensions, quantization, metric } = instance.config;
   const entries = Array.from(instance.entries.values());
 
@@ -151,7 +151,7 @@ export function serialize(instance: VCoreInstance): Buffer {
   return buf;
 }
 
-export function deserialize(buffer: Buffer, instance: VCoreInstance): void {
+export function deserialize(buffer: Buffer, instance: TrovecInstance): void {
   const { dimensions, quantization } = instance.config;
 
   // Read and validate header

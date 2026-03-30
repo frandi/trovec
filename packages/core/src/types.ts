@@ -33,7 +33,7 @@ export interface Embedder {
   embedMany(input: string[]): Promise<EmbedResult[]>;
 }
 
-export interface VCoreConfig {
+export interface TrovecConfig {
   dimensions: number;
   quantization?: QuantizationType;
   metric?: MetricType;
@@ -41,7 +41,7 @@ export interface VCoreConfig {
   embedder?: Embedder;
 }
 
-export interface VCoreStats {
+export interface TrovecStats {
   entryCount: number;
   dimensions: number;
   quantization: QuantizationType;
@@ -79,7 +79,7 @@ export interface QuantizationCodec {
 
 export type SimilarityFn = (a: QuantizedVector, b: QuantizedVector) => number;
 
-export interface ResolvedVCoreConfig {
+export interface ResolvedTrovecConfig {
   dimensions: number;
   quantization: QuantizationType;
   metric: MetricType;
@@ -87,8 +87,8 @@ export interface ResolvedVCoreConfig {
   embedder?: Embedder;
 }
 
-export interface VCoreInstance {
-  readonly config: Readonly<ResolvedVCoreConfig>;
+export interface TrovecInstance {
+  readonly config: Readonly<ResolvedTrovecConfig>;
   entries: Map<string, StoredEntry>;
   codec: QuantizationCodec;
   similarityFn: SimilarityFn;

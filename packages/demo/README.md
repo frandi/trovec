@@ -1,6 +1,6 @@
-# VCore Demo
+# Trovec Demo
 
-Interactive CLI demo that showcases VCore's core capabilities: embedding, storage, persistence, similarity search, and metadata filtering.
+Interactive CLI demo that showcases Trovec's core capabilities: embedding, storage, persistence, similarity search, and metadata filtering.
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ The demo walks through 7 steps in sequence:
 
 | Step | Name | Description |
 |------|------|-------------|
-| 1 | **Initialize VCore Instance** | Creates a vector database configured with an embedder, quantization, metric, and storage driver |
+| 1 | **Initialize Trovec Instance** | Creates a vector database configured with an embedder, quantization, metric, and storage driver |
 | 2 | **Embed & Store Documents** | Embeds 8 sample documents (animals, programming, databases, food) and stores them with metadata |
 | 3 | **Persist to Storage** | Serializes the database to a `MemoryDriver` buffer |
 | 4 | **Restore from Storage** | Creates a fresh instance and deserializes the buffer back into it |
@@ -73,11 +73,11 @@ For development and CI, local is fine. For evaluating real search quality locall
 
 ```
   ╔══════════════════════════════════════════════════════════════╗
-  ║                  VCore CLI Demo                              ║
+  ║                  Trovec CLI Demo                              ║
   ║          Vector Database Library for Node.js                 ║
   ╚══════════════════════════════════════════════════════════════╝
 
-   STEP 1  Initialize VCore Instance
+   STEP 1  Initialize Trovec Instance
   ────────────────────────────────────────────────────────────────
     Embedder: Local (trigram hash)
     Dimensions: 64

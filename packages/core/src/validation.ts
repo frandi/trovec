@@ -1,4 +1,4 @@
-import type { EntryId, Entry, VCoreConfig, ResolvedVCoreConfig, StorageDriver } from './types.js';
+import type { EntryId, Entry, TrovecConfig, ResolvedTrovecConfig, StorageDriver } from './types.js';
 import { DimensionMismatchError, InvalidConfigError } from './errors.js';
 
 const BIGINT_PREFIX = '__bigint__:';
@@ -10,7 +10,7 @@ const nullDriver: StorageDriver = {
   async delete() { return false; },
 };
 
-export function validateConfig(config: VCoreConfig): ResolvedVCoreConfig {
+export function validateConfig(config: TrovecConfig): ResolvedTrovecConfig {
   if (!Number.isInteger(config.dimensions) || config.dimensions <= 0) {
     throw new InvalidConfigError('dimensions must be a positive integer');
   }

@@ -1,20 +1,20 @@
-# vcore-embedder-local
+# @trovec/embedder-local
 
-A zero-dependency local text embedder for [VCore](../vcore/README.md). Converts text to vector embeddings using character n-gram hashing — no API keys, no model files, no setup required.
+A zero-dependency local text embedder for [Trovec](../core/README.md). Converts text to vector embeddings using character n-gram hashing — no API keys, no model files, no setup required.
 
-> **Warning:** This embedder uses simple text hashing, not a real ML model. It does not capture true semantic meaning. **Use it for prototyping, testing, CI, and demos only.** For production, use a proper embedding model like [`vcore-embedder-openai`](../vcore-embedder-openai/).
+> **Warning:** This embedder uses simple text hashing, not a real ML model. It does not capture true semantic meaning. **Use it for prototyping, testing, CI, and demos only.** For production, use a proper embedding model like [`@trovec/embedder-openai`](../embedder-openai/).
 
 ## Installation
 
 ```bash
-npm install vcore vcore-embedder-local
+npm install @trovec/core @trovec/embedder-local
 ```
 
 ## Usage
 
 ```typescript
-import { create, addWithText, queryByText } from 'vcore';
-import { createLocalEmbedder } from 'vcore-embedder-local';
+import { create, addWithText, queryByText } from '@trovec/core';
+import { createLocalEmbedder } from '@trovec/embedder-local';
 
 const db = create({
   dimensions: 64,
@@ -60,11 +60,11 @@ This produces deterministic, reproducible embeddings that capture surface-level 
 
 | Use case | Recommended embedder |
 |----------|---------------------|
-| Learning the VCore API | `vcore-embedder-local` |
-| Unit tests / CI | `vcore-embedder-local` |
-| Demos and prototypes | `vcore-embedder-local` |
-| Production search | `vcore-embedder-openai` or similar |
-| Semantic similarity | `vcore-embedder-openai` or similar |
+| Learning the Trovec API | `@trovec/embedder-local` |
+| Unit tests / CI | `@trovec/embedder-local` |
+| Demos and prototypes | `@trovec/embedder-local` |
+| Production search | `@trovec/embedder-openai` or similar |
+| Semantic similarity | `@trovec/embedder-openai` or similar |
 
 ## License
 

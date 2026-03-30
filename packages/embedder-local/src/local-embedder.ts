@@ -1,5 +1,5 @@
 /**
- * A zero-dependency local text embedder for VCore.
+ * A zero-dependency local text embedder for Trovec.
  *
  * Generates deterministic embeddings from text using character n-gram hashing
  * with L2 normalization. Runs entirely in-process — no API calls, no model files,
@@ -10,9 +10,9 @@
  * meaning. For production applications, use a real embedding model (OpenAI, Ollama,
  * Sentence Transformers, etc.).
  *
- * Good for: prototyping, testing, CI, demos, learning the VCore API.
+ * Good for: prototyping, testing, CI, demos, learning the Trovec API.
  */
-import type { Embedder, EmbedResult } from 'vcore';
+import type { Embedder, EmbedResult } from '@trovec/core';
 
 export interface LocalEmbedderOptions {
   /**
@@ -85,9 +85,9 @@ function textToEmbedding(text: string, dimensions: number): number[] {
 }
 
 const WARNING =
-  '[vcore-embedder-local] This embedder uses simple text hashing, not a real ML model. ' +
+  '[@trovec/embedder-local] This embedder uses simple text hashing, not a real ML model. ' +
   'It is intended for prototyping and testing only. ' +
-  'For production, use a proper embedding model (e.g., vcore-embedder-openai).';
+  'For production, use a proper embedding model (e.g., @trovec/embedder-openai).';
 
 export function createLocalEmbedder(options: LocalEmbedderOptions = {}): Embedder {
   const dimensions = options.dimensions ?? 64;

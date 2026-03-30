@@ -786,7 +786,7 @@ function printComparison(allResults: Map<string, TestResult[]>): void {
 
 async function main(): Promise<void> {
   console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║    Ollama Quality Benchmark (LLM-as-Judge) — VCore      ║');
+  console.log('║    Ollama Quality Benchmark (LLM-as-Judge) — Trovec      ║');
   console.log('╠══════════════════════════════════════════════════════════╣');
   console.log(`║  Host:        ${BASE_URL.padEnd(41)}║`);
   console.log(`║  Models:      ${LLM_MODELS.join(', ').padEnd(41)}║`);

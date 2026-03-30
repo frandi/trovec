@@ -1,7 +1,7 @@
 {
-  "name": "vcore-embedder-ollama",
+  "name": "@trovec/embedder-local",
   "version": "1.0.0",
-  "description": "Ollama embeddings adapter for VCore",
+  "description": "Zero-dependency local text embedder for Trovec. For prototyping and testing only.",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -36,16 +36,16 @@
     "node": ">=18.0.0"
   },
   "keywords": [
-    "vcore",
+    "trovec",
     "embedder",
-    "ollama",
+    "local",
     "embedding",
     "vector",
-    "local"
+    "zero-dependency"
   ],
   "license": "MIT",
   "peerDependencies": {
-    "vcore": "^1.0.0"
+    "@trovec/core": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"
