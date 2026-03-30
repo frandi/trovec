@@ -1,8 +1,8 @@
 {
-  "name": "vcore-demo",
+  "name": "@trovec/demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Interactive CLI demo for VCore",
+  "description": "Interactive CLI demo for Trovec",
   "type": "module",
   "scripts": {
     "start": "npx tsx src/main.ts",
@@ -12,10 +12,10 @@
     "clean": "echo 'nothing to clean'"
   },
   "dependencies": {
-    "vcore": "*",
-    "vcore-embedder-local": "*",
-    "vcore-embedder-openai": "*",
-    "vcore-embedder-ollama": "*"
+    "@trovec/core": "*",
+    "@trovec/embedder-local": "*",
+    "@trovec/embedder-openai": "*",
+    "@trovec/embedder-ollama": "*"
   },
   "devDependencies": {
     "tsx": "^4.0.0"

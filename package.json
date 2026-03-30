@@ -1,5 +1,5 @@
 {
-  "name": "vcore-monorepo",
+  "name": "trovec",
   "private": true,
   "workspaces": [
     "packages/*"
