@@ -4,7 +4,7 @@ import { get } from '../src/collection.js';
 import { query } from '../src/query.js';
 import { embed, embedMany, addWithText, addManyWithText, queryByText } from '../src/embedder.js';
 import type { Embedder } from '../src/types.js';
-import { VCoreError } from '../src/errors.js';
+import { TrovecError } from '../src/errors.js';
 
 function createMockEmbedder(dimensions: number): Embedder {
   return {
@@ -37,7 +37,7 @@ describe('embed', () => {
 
   it('throws if no embedder is configured', async () => {
     const instance = create({ dimensions: 3 });
-    await expect(embed(instance, 'hello')).rejects.toThrow(VCoreError);
+    await expect(embed(instance, 'hello')).rejects.toThrow(TrovecError);
     await expect(embed(instance, 'hello')).rejects.toThrow(/No embedder configured/);
   });
 });
@@ -55,7 +55,7 @@ describe('embedMany', () => {
 
   it('throws if no embedder is configured', async () => {
     const instance = create({ dimensions: 3 });
-    await expect(embedMany(instance, ['hello'])).rejects.toThrow(VCoreError);
+    await expect(embedMany(instance, ['hello'])).rejects.toThrow(TrovecError);
   });
 });
 
@@ -84,7 +84,7 @@ describe('addWithText', () => {
 
   it('throws if no embedder is configured', async () => {
     const instance = create({ dimensions: 3 });
-    await expect(addWithText(instance, { id: 'doc1', text: 'hello' })).rejects.toThrow(VCoreError);
+    await expect(addWithText(instance, { id: 'doc1', text: 'hello' })).rejects.toThrow(TrovecError);
   });
 });
 
@@ -149,6 +149,6 @@ describe('queryByText', () => {
 
   it('throws if no embedder is configured', async () => {
     const instance = create({ dimensions: 3 });
-    await expect(queryByText(instance, { text: 'hello' })).rejects.toThrow(VCoreError);
+    await expect(queryByText(instance, { text: 'hello' })).rejects.toThrow(TrovecError);
   });
 });

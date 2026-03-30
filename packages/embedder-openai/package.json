@@ -1,7 +1,7 @@
 {
-  "name": "vcore-embedder-openai",
+  "name": "@trovec/embedder-openai",
   "version": "1.0.0",
-  "description": "OpenAI embeddings adapter for VCore",
+  "description": "OpenAI embeddings adapter for Trovec",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -36,7 +36,7 @@
     "node": ">=18.0.0"
   },
   "keywords": [
-    "vcore",
+    "trovec",
     "embedder",
     "openai",
     "embedding",
@@ -44,7 +44,7 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "vcore": "^1.0.0"
+    "@trovec/core": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"

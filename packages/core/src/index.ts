@@ -3,15 +3,15 @@ export type {
   EntryId,
   QueryResult,
   QueryParams,
-  VCoreConfig,
-  VCoreStats,
-  VCoreInstance,
+  TrovecConfig,
+  TrovecStats,
+  TrovecInstance,
   StorageDriver,
   QuantizationType,
   MetricType,
   Embedder,
   EmbedResult,
-  ResolvedVCoreConfig,
+  ResolvedTrovecConfig,
 } from './types.js';
 
 export { create, flush, stats } from './core.js';

@@ -1,20 +1,20 @@
-# vcore-embedder-openai
+# @trovec/embedder-openai
 
-OpenAI embeddings adapter for [VCore](../vcore/README.md). Converts text to vector embeddings using the OpenAI Embeddings API.
+OpenAI embeddings adapter for [Trovec](../core/README.md). Converts text to vector embeddings using the OpenAI Embeddings API.
 
 Zero runtime dependencies — uses Node.js 18+ built-in `fetch`.
 
 ## Installation
 
 ```bash
-npm install vcore vcore-embedder-openai
+npm install @trovec/core @trovec/embedder-openai
 ```
 
 ## Usage
 
 ```typescript
-import { create, addWithText, queryByText } from 'vcore';
-import { createOpenAIEmbedder } from 'vcore-embedder-openai';
+import { create, addWithText, queryByText } from '@trovec/core';
+import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 
 const db = create({
   dimensions: 1536,

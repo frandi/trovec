@@ -1,7 +1,7 @@
-import type { VCoreInstance, Entry, EntryId } from './types.js';
+import type { TrovecInstance, Entry, EntryId } from './types.js';
 import { validateEntry, validateEntries, serializeId } from './validation.js';
 
-export function add(instance: VCoreInstance, entry: Entry): void {
+export function add(instance: TrovecInstance, entry: Entry): void {
   validateEntry(entry, instance.config.dimensions);
 
   const quantized = instance.codec.encode(entry.embedding);
@@ -16,7 +16,7 @@ export function add(instance: VCoreInstance, entry: Entry): void {
   instance.dirty = true;
 }
 
-export function addMany(instance: VCoreInstance, entries: Entry[]): void {
+export function addMany(instance: TrovecInstance, entries: Entry[]): void {
   // Validate ALL entries before any mutation (atomic)
   validateEntries(entries, instance.config.dimensions);
 
@@ -40,7 +40,7 @@ export function addMany(instance: VCoreInstance, entries: Entry[]): void {
   }
 }
 
-export function del(instance: VCoreInstance, id: EntryId): boolean {
+export function del(instance: TrovecInstance, id: EntryId): boolean {
   const key = serializeId(id);
   const existed = instance.entries.delete(key);
 
@@ -51,7 +51,7 @@ export function del(instance: VCoreInstance, id: EntryId): boolean {
   return existed;
 }
 
-export function get(instance: VCoreInstance, id: EntryId): Entry | undefined {
+export function get(instance: TrovecInstance, id: EntryId): Entry | undefined {
   const key = serializeId(id);
   const stored = instance.entries.get(key);
 

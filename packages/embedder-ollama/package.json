@@ -1,7 +1,7 @@
 {
-  "name": "vcore",
+  "name": "@trovec/embedder-ollama",
   "version": "1.0.0",
-  "description": "Lightweight, zero-dependency vector database library for Node.js",
+  "description": "Ollama embeddings adapter for Trovec",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -30,22 +30,24 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
     "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "keywords": [
-    "vector",
-    "database",
+    "trovec",
+    "embedder",
+    "ollama",
     "embedding",
-    "similarity",
-    "search"
+    "vector",
+    "local"
   ],
   "license": "MIT",
+  "peerDependencies": {
+    "@trovec/core": "^1.0.0"
+  },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@vitest/coverage-v8": "^3.0.0"
+    "@types/node": "^22.0.0"
   }
 }

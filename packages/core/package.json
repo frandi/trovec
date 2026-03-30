@@ -1,7 +1,7 @@
 {
-  "name": "vcore-embedder-local",
+  "name": "@trovec/core",
   "version": "1.0.0",
-  "description": "Zero-dependency local text embedder for VCore. For prototyping and testing only.",
+  "description": "Lightweight, zero-dependency vector database library for Node.js",
   "type": "module",
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
@@ -30,24 +30,22 @@
     "clean": "rm -rf dist",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "keywords": [
-    "vcore",
-    "embedder",
-    "local",
-    "embedding",
     "vector",
-    "zero-dependency"
+    "database",
+    "embedding",
+    "similarity",
+    "search"
   ],
   "license": "MIT",
-  "peerDependencies": {
-    "vcore": "^1.0.0"
-  },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^3.0.0"
   }
 }

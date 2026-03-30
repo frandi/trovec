@@ -1,4 +1,4 @@
-import type { Embedder, EmbedResult } from 'vcore';
+import type { Embedder, EmbedResult } from '@trovec/core';
 
 export interface OllamaEmbedderOptions {
   model?: string;

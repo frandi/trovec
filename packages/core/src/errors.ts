@@ -1,18 +1,18 @@
-export class VCoreError extends Error {
+export class TrovecError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'VCoreError';
+    this.name = 'TrovecError';
   }
 }
 
-export class DimensionMismatchError extends VCoreError {
+export class DimensionMismatchError extends TrovecError {
   constructor(expected: number, got: number) {
     super(`Expected embedding of dimension ${expected} but got ${got}`);
     this.name = 'DimensionMismatchError';
   }
 }
 
-export class InvalidConfigError extends VCoreError {
+export class InvalidConfigError extends TrovecError {
   constructor(message: string) {
     super(message);
     this.name = 'InvalidConfigError';

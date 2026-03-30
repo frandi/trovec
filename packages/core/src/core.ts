@@ -1,4 +1,4 @@
-import type { VCoreConfig, VCoreInstance, VCoreStats } from './types.js';
+import type { TrovecConfig, TrovecInstance, TrovecStats } from './types.js';
 import { validateConfig } from './validation.js';
 import { getCodec } from './quantization/index.js';
 import { getMetric } from './similarity/index.js';
@@ -6,12 +6,12 @@ import { serialize } from './serialization.js';
 
 let instanceCounter = 0;
 
-export function create(config: VCoreConfig): VCoreInstance {
+export function create(config: TrovecConfig): TrovecInstance {
   const resolved = validateConfig(config);
 
   const codec = getCodec(resolved.quantization);
   const similarityFn = getMetric(resolved.metric);
-  const collectionId = `vcore_${++instanceCounter}`;
+  const collectionId = `trovec_${++instanceCounter}`;
 
   return {
     config: Object.freeze(resolved),
@@ -23,7 +23,7 @@ export function create(config: VCoreConfig): VCoreInstance {
   };
 }
 
-export async function flush(instance: VCoreInstance): Promise<void> {
+export async function flush(instance: TrovecInstance): Promise<void> {
   if (!instance.config.storageDriver) return;
 
   const buffer = serialize(instance);
@@ -31,7 +31,7 @@ export async function flush(instance: VCoreInstance): Promise<void> {
   instance.dirty = false;
 }
 
-export function stats(instance: VCoreInstance): VCoreStats {
+export function stats(instance: TrovecInstance): TrovecStats {
   return {
     entryCount: instance.entries.size,
     dimensions: instance.config.dimensions,

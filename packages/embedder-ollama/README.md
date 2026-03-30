@@ -1,6 +1,6 @@
-# vcore-embedder-ollama
+# @trovec/embedder-ollama
 
-Ollama embeddings adapter for [VCore](../vcore/README.md). Converts text to vector embeddings using a locally running [Ollama](https://ollama.com/) server.
+Ollama embeddings adapter for [Trovec](../core/README.md). Converts text to vector embeddings using a locally running [Ollama](https://ollama.com/) server.
 
 Zero runtime dependencies — uses Node.js 18+ built-in `fetch`. No API key required.
 
@@ -15,14 +15,14 @@ ollama pull nomic-embed-text
 ## Installation
 
 ```bash
-npm install vcore vcore-embedder-ollama
+npm install @trovec/core @trovec/embedder-ollama
 ```
 
 ## Usage
 
 ```typescript
-import { create, addWithText, queryByText } from 'vcore';
-import { createOllamaEmbedder } from 'vcore-embedder-ollama';
+import { create, addWithText, queryByText } from '@trovec/core';
+import { createOllamaEmbedder } from '@trovec/embedder-ollama';
 
 const db = create({
   dimensions: 768,
