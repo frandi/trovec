@@ -56,6 +56,17 @@ export interface StorageDriver {
   delete(collectionId: string): Promise<boolean>;
 }
 
+export interface FileDriverOptions {
+  directory?: string;
+  compression?: boolean;
+  compressionLevel?: number;
+}
+
+export interface FileStorageDriver extends StorageDriver {
+  readonly directory: string;
+  destroy(): Promise<void>;
+}
+
 // === Internal types ===
 
 export interface QuantizedVector {
