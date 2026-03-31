@@ -73,6 +73,50 @@ const results = db.query({
 
 ### Persistence
 
+Trovec provides two built-in storage drivers:
+
+#### File Storage (recommended for most use cases)
+
+Persists data to disk with automatic Brotli compression. Data survives app restarts.
+
+```typescript
+import { create, createFileDriver } from '@trovec/core';
+
+// Zero-config: defaults to .trovec/ directory with Brotli compression
+const driver = createFileDriver();
+
+// Or customize:
+// const driver = createFileDriver({
+//   directory: './my-data',    // default: '.trovec'
+//   compression: true,         // default: true (Brotli)
+//   compressionLevel: 1,       // default: 1 (fast), range: 0-11
+// });
+
+const db = create({ dimensions: 3, storageDriver: driver });
+db.add({ id: 'a', embedding: [1, 2, 3] });
+
+// Persist to disk
+await db.flush();
+
+// Later: restore into a new instance
+const db2 = create({ dimensions: 3, storageDriver: driver });
+const buffer = await driver.read(db.collectionId);
+if (buffer) db2.deserialize(buffer);
+
+// Clean up all stored files when no longer needed
+await driver.destroy();
+```
+
+The file driver:
+- Auto-creates the directory on first write
+- Uses atomic writes (temp file + rename) to prevent corruption
+- Applies Brotli compression by default (typically 60-80% size reduction)
+- Exposes `driver.directory` for inspecting the resolved path
+
+#### Memory Storage (for testing and ephemeral data)
+
+Stores data in a `Map` — fast, but data is lost when the process exits.
+
 ```typescript
 import { create, createMemoryDriver } from '@trovec/core';
 
@@ -80,11 +124,8 @@ const driver = createMemoryDriver();
 const db = create({ dimensions: 3, storageDriver: driver });
 
 db.add({ id: 'a', embedding: [1, 2, 3] });
-
-// Persist to storage
 await db.flush();
 
-// Later: restore into a new instance
 const db2 = create({ dimensions: 3, storageDriver: driver });
 const buffer = await driver.read(db.collectionId);
 if (buffer) db2.deserialize(buffer);
@@ -229,6 +270,7 @@ src/
   storage/
     index.ts                 StorageDriver re-export
     memory.ts                In-memory Map-backed driver
+    file.ts                  File system driver with Brotli compression
 ```
 
 ### How It Works
@@ -278,6 +320,26 @@ export function createMyEmbedder(options: { apiKey: string }): Embedder {
 ```
 
 Publish as a separate package (e.g., `@trovec/embedder-mymodel`) to keep Trovec zero-dependency.
+
+## How Persistence Works
+
+When using a storage driver, all data is loaded into memory for querying:
+
+1. **On startup**, call `driver.read()` and `db.deserialize()` to load entries from storage into an in-memory `Map`.
+2. **Queries** run entirely in-memory via brute-force scan — the storage driver is never touched during search.
+3. **On save**, call `db.flush()` to serialize and write all entries back to storage.
+
+This design keeps queries fast (sub-millisecond for thousands of entries) but means the full dataset must fit in memory.
+
+### Future Improvement Considerations
+
+For larger datasets that exceed available memory, several strategies could be explored:
+
+- **Streaming query** — read and score entries in chunks directly from the binary buffer, keeping only the top-K results in a min-heap. Memory usage becomes O(K) instead of O(N).
+- **Partitioned storage** — split collections into fixed-size shards (e.g., 10K entries each). Query loads one shard at a time, merging top-K across shards. Memory stays bounded to a single shard.
+- **Memory-mapped files** — use `mmap` to map `.trovec` files into virtual address space. The OS pages data in/out on demand, giving near-memory speed for hot data without loading everything.
+- **Approximate Nearest Neighbor (ANN) indexing** — replace brute-force with structures like HNSW or IVF that only visit a subset of vectors per query. Index metadata stays in memory while vectors can remain on disk.
+- **Hot/cold tiering** — keep recently accessed entries in an LRU cache, everything else on disk. Queries hit the cache first, fall back to disk for misses.
 
 ## Development
 

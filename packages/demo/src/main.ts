@@ -1,11 +1,15 @@
 import {
   create,
   createMemoryDriver,
+  createFileDriver,
 } from '@trovec/core';
 import type { Embedder } from '@trovec/core';
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 import { createOllamaEmbedder } from '@trovec/embedder-ollama';
+import DOCUMENTS from './documents.json' with { type: 'json' };
 
 // ─── ANSI Helpers ─────────────────────────────────────────────────────────────
 
@@ -76,17 +80,6 @@ async function sleep(ms: number) {
 }
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
-
-const DOCUMENTS = [
-  { id: 'doc-1', text: 'Cats are independent and curious animals',              context: { category: 'animals', source: 'encyclopedia' } },
-  { id: 'doc-2', text: 'Dogs are loyal companions and love to play fetch',      context: { category: 'animals', source: 'encyclopedia' } },
-  { id: 'doc-3', text: 'TypeScript adds static typing to JavaScript',           context: { category: 'programming', source: 'blog' } },
-  { id: 'doc-4', text: 'Node.js enables server-side JavaScript execution',      context: { category: 'programming', source: 'docs' } },
-  { id: 'doc-5', text: 'Vector databases store and search high-dimensional data', context: { category: 'databases', source: 'article' } },
-  { id: 'doc-6', text: 'Machine learning models generate embedding vectors',    context: { category: 'ml', source: 'textbook' } },
-  { id: 'doc-7', text: 'The quick brown fox jumps over the lazy dog',           context: { category: 'animals', source: 'pangram' } },
-  { id: 'doc-8', text: 'Espresso is a concentrated form of coffee',             context: { category: 'food', source: 'wiki' } },
-];
 
 const QUERIES = [
   { text: 'pets and animals',       description: 'Broad animal query' },
@@ -173,9 +166,9 @@ async function main() {
   const s = db.stats();
   success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries${c.reset}`);
 
-  // ── Step 3: Persist to Storage ──────────────────────────────────────────────
+  // ── Step 3: Persist to Memory Storage ────────────────────────────────────────
 
-  step(3, 'Persist to Storage');
+  step(3, 'Persist to Memory Storage');
 
   await db.flush();
   const buffer = await driver.read(db.collectionId);
@@ -183,29 +176,68 @@ async function main() {
   info('Buffer size', buffer ? `${buffer.length} bytes` : 'N/A');
   success('Flushed to MemoryDriver');
 
-  // ── Step 4: Restore from Storage ────────────────────────────────────────────
+  // ── Step 4: Persist to File Storage (with Brotli compression) ──────────────
 
-  step(4, 'Restore from Storage');
+  step(4, 'Persist to File Storage (Brotli Compression)');
+
+  const fileDriver = createFileDriver({ directory: '.trovec-demo' });
+  const dbFile = create({
+    dimensions,
+    quantization: 'F32',
+    metric: 'cosine',
+    embedder,
+    storageDriver: fileDriver,
+  });
+
+  // Copy entries from original db
+  for (const doc of DOCUMENTS) {
+    const entry = db.get(doc.id)!;
+    dbFile.add(entry);
+  }
+
+  const flushStart = performance.now();
+  await dbFile.flush();
+  const flushElapsed = (performance.now() - flushStart).toFixed(1);
+
+  const rawSize = buffer ? buffer.length : 0;
+  const fileStat = await stat(join(fileDriver.directory, `${dbFile.collectionId}.trovec`));
+  const fileSize = fileStat.size;
+  const ratio = ((1 - fileSize / rawSize) * 100).toFixed(1);
+
+  info('Directory', fileDriver.directory);
+  info('Compression', 'Brotli (quality 1)');
+  info('Raw size', `${rawSize} bytes`);
+  info('File size', `${fileSize} bytes (${ratio}% smaller)`);
+  info('Flush time', `${flushElapsed}ms`);
+  success(`Persisted to file system`);
+
+  // ── Step 5: Restore from File Storage ──────────────────────────────────────
+
+  step(5, 'Restore from File Storage');
 
   const db2 = create({
     dimensions,
     quantization: 'F32',
     metric: 'cosine',
     embedder,
-    storageDriver: driver,
+    storageDriver: fileDriver,
   });
 
-  if (buffer) {
-    db2.deserialize(buffer);
+  const restoreStart = performance.now();
+  const fileBuffer = await fileDriver.read(dbFile.collectionId);
+  if (fileBuffer) {
+    db2.deserialize(fileBuffer);
   }
+  const restoreElapsed = (performance.now() - restoreStart).toFixed(1);
 
   const s2 = db2.stats();
   info('Restored entries', String(s2.entryCount));
-  success(`New instance loaded from storage${c.dim} (same data, fresh instance)${c.reset}`);
+  info('Restore time', `${restoreElapsed}ms`);
+  success(`Loaded from file${c.dim} (decompressed + deserialized, fresh instance)${c.reset}`);
 
-  // ── Step 5: Similarity Search ───────────────────────────────────────────────
+  // ── Step 6: Similarity Search ───────────────────────────────────────────────
 
-  step(5, 'Similarity Search');
+  step(6, 'Similarity Search');
 
   for (const q of QUERIES) {
     console.log();
@@ -222,9 +254,9 @@ async function main() {
     }
   }
 
-  // ── Step 6: Filtered Query ──────────────────────────────────────────────────
+  // ── Step 7: Filtered Query ──────────────────────────────────────────────────
 
-  step(6, 'Filtered Query');
+  step(7, 'Filtered Query');
 
   console.log(`${INDENT}  ${c.magenta}${c.bold}Query:${c.reset} "curious creatures" ${c.dim}(filter: category = animals)${c.reset}`);
 
@@ -239,9 +271,9 @@ async function main() {
     resultRow(i + 1, String(filtered[i].id), filtered[i].score, filtered[i].context);
   }
 
-  // ── Step 7: Stats & Summary ─────────────────────────────────────────────────
+  // ── Step 8: Stats & Summary ─────────────────────────────────────────────────
 
-  step(7, 'Final Stats');
+  step(8, 'Final Stats');
 
   const finalStats = db2.stats();
   info('Total entries', String(finalStats.entryCount));
@@ -249,6 +281,14 @@ async function main() {
   info('Quantization', finalStats.quantization);
   info('Metric', finalStats.metric);
   info('Index', finalStats.indexStatus);
+
+  // ── Cleanup ──────────────────────────────────────────────────────────────────
+
+  step(9, 'Cleanup');
+
+  await fileDriver.destroy();
+  info('Removed', fileDriver.directory);
+  success('File storage cleaned up');
 
   // ── Done ────────────────────────────────────────────────────────────────────
 

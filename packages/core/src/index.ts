@@ -8,6 +8,8 @@ export type {
   TrovecInstance,
   Trovec,
   StorageDriver,
+  FileStorageDriver,
+  FileDriverOptions,
   QuantizationType,
   MetricType,
   Embedder,
@@ -26,5 +28,7 @@ export { query } from './query.js';
 export { embed, embedMany, addWithText, addManyWithText, queryByText } from './embedder.js';
 
 export { createMemoryDriver } from './storage/memory.js';
+
+export { createFileDriver } from './storage/file.js';
 
 export { serialize, deserialize } from './serialization.js';

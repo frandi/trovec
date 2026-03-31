@@ -28,14 +28,19 @@ npm install @trovec/core @trovec/embedder-openai
 ```
 
 ```typescript
-import { create } from '@trovec/core';
+import { create, createFileDriver } from '@trovec/core';
 
-const db = create({ dimensions: 3 });
+// Persistent storage with Brotli compression (zero-config)
+const driver = createFileDriver();
+
+const db = create({ dimensions: 3, storageDriver: driver });
 db.add({ id: 'cat', embedding: [0.9, 0.1, 0.0], context: { type: 'animal' } });
 db.add({ id: 'car', embedding: [0.0, 0.1, 0.9], context: { type: 'vehicle' } });
 
 const results = db.query({ vector: [1, 0, 0], topK: 1 });
 // [{ id: 'cat', score: 0.993..., context: { type: 'animal' } }]
+
+await db.flush(); // persist to disk
 ```
 
 See each package's README for detailed documentation.
