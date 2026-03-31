@@ -33,7 +33,7 @@ import { create, createFileDriver } from '@trovec/core';
 // Persistent storage with Brotli compression (zero-config)
 const driver = createFileDriver();
 
-const db = create({ dimensions: 3, storageDriver: driver });
+const db = await create({ dimensions: 3, storageDriver: driver });
 db.add({ id: 'cat', embedding: [0.9, 0.1, 0.0], context: { type: 'animal' } });
 db.add({ id: 'car', embedding: [0.0, 0.1, 0.9], context: { type: 'vehicle' } });
 

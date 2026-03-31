@@ -29,14 +29,14 @@ function createMockEmbedder(dimensions: number): Embedder {
 describe('embed', () => {
   it('delegates to the configured embedder', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     const result = await embed(instance, 'hello');
     expect(result.embedding).toHaveLength(3);
   });
 
   it('throws if no embedder is configured', async () => {
-    const instance = create({ dimensions: 3 });
+    const instance = await create({ dimensions: 3 });
     await expect(embed(instance, 'hello')).rejects.toThrow(TrovecError);
     await expect(embed(instance, 'hello')).rejects.toThrow(/No embedder configured/);
   });
@@ -45,7 +45,7 @@ describe('embed', () => {
 describe('embedMany', () => {
   it('delegates to the configured embedder', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     const results = await embedMany(instance, ['hello', 'world']);
     expect(results).toHaveLength(2);
@@ -54,7 +54,7 @@ describe('embedMany', () => {
   });
 
   it('throws if no embedder is configured', async () => {
-    const instance = create({ dimensions: 3 });
+    const instance = await create({ dimensions: 3 });
     await expect(embedMany(instance, ['hello'])).rejects.toThrow(TrovecError);
   });
 });
@@ -62,7 +62,7 @@ describe('embedMany', () => {
 describe('addWithText', () => {
   it('embeds text and adds entry', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'doc1', text: 'hello world' });
 
@@ -74,7 +74,7 @@ describe('addWithText', () => {
 
   it('preserves context', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'doc1', text: 'hello', context: { source: 'test' } });
 
@@ -83,7 +83,7 @@ describe('addWithText', () => {
   });
 
   it('throws if no embedder is configured', async () => {
-    const instance = create({ dimensions: 3 });
+    const instance = await create({ dimensions: 3 });
     await expect(addWithText(instance, { id: 'doc1', text: 'hello' })).rejects.toThrow(TrovecError);
   });
 });
@@ -91,7 +91,7 @@ describe('addWithText', () => {
 describe('addManyWithText', () => {
   it('embeds and batch inserts multiple entries', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     await addManyWithText(instance, [
       { id: 'doc1', text: 'hello world' },
@@ -106,7 +106,7 @@ describe('addManyWithText', () => {
   it('calls embedMany on the embedder', async () => {
     const mockEmbedder = createMockEmbedder(3);
     const spy = vi.spyOn(mockEmbedder, 'embedMany');
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     await addManyWithText(instance, [
       { id: 'a', text: 'one' },
@@ -121,7 +121,7 @@ describe('addManyWithText', () => {
 describe('queryByText', () => {
   it('embeds query text and returns results', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'doc1', text: 'hello world' });
     await addWithText(instance, { id: 'doc2', text: 'foo bar baz' });
@@ -133,7 +133,7 @@ describe('queryByText', () => {
 
   it('supports filter parameter', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'a', text: 'hello', context: { group: 'X' } });
     await addWithText(instance, { id: 'b', text: 'hello', context: { group: 'Y' } });
@@ -148,7 +148,7 @@ describe('queryByText', () => {
   });
 
   it('throws if no embedder is configured', async () => {
-    const instance = create({ dimensions: 3 });
+    const instance = await create({ dimensions: 3 });
     await expect(queryByText(instance, { text: 'hello' })).rejects.toThrow(TrovecError);
   });
 });

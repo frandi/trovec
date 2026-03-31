@@ -16,7 +16,7 @@ npm install @trovec/core @trovec/embedder-openai
 import { create, addWithText, queryByText } from '@trovec/core';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 
-const db = create({
+const db = await create({
   dimensions: 1536,
   embedder: createOpenAIEmbedder({
     apiKey: process.env.OPENAI_API_KEY!,

@@ -28,7 +28,7 @@ Based on your selections, the demo runs through the relevant steps:
 | Step | Description | When |
 |------|-------------|------|
 | **Initialize** | Creates a Trovec instance with selected embedder, storage, and config | Always |
-| **Restore from File** | Deserializes previously persisted data | Reusing persisted data |
+| **Data Restored** | Data auto-loaded from storage during instance creation | Reusing persisted data |
 | **Embed & Store** | Embeds 64 sample documents and stores them with metadata | Fresh start |
 | **Persist to File** | Flushes to disk with Brotli compression, shows compression ratio | Persisted + fresh |
 | **Serialize to Memory** | Flushes to in-memory buffer, shows buffer size | In-memory + fresh |

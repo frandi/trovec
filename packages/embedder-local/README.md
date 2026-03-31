@@ -16,7 +16,7 @@ npm install @trovec/core @trovec/embedder-local
 import { create, addWithText, queryByText } from '@trovec/core';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 
-const db = create({
+const db = await create({
   dimensions: 64,
   embedder: createLocalEmbedder(),
 });
