@@ -10,37 +10,43 @@ Interactive CLI demo that showcases Trovec's core capabilities: embedding, stora
 ## Quick Start
 
 ```bash
-# Default — uses local embedder, no API key needed
 npm start
-
-# With OpenAI embeddings (requires OPENAI_API_KEY in .env)
-npm run start:openai
-
-# With Ollama embeddings (requires running Ollama server)
-npm run start:ollama
 ```
 
-## What the Demo Does
+The demo will guide you through interactive prompts to configure storage and embedder options.
 
-The demo walks through 7 steps in sequence:
+## How It Works
 
-| Step | Name | Description |
-|------|------|-------------|
-| 1 | **Initialize Trovec Instance** | Creates a vector database configured with an embedder, quantization, metric, and storage driver |
-| 2 | **Embed & Store Documents** | Embeds 8 sample documents (animals, programming, databases, food) and stores them with metadata |
-| 3 | **Persist to Storage** | Serializes the database to a `MemoryDriver` buffer |
-| 4 | **Restore from Storage** | Creates a fresh instance and deserializes the buffer back into it |
-| 5 | **Similarity Search** | Runs 3 semantic queries ("pets and animals", "JavaScript programming", "similarity search") and ranks results by cosine similarity |
-| 6 | **Filtered Query** | Searches "curious creatures" with a metadata filter that limits results to the "animals" category |
-| 7 | **Final Stats** | Prints database statistics (entry count, dimensions, quantization, metric, index type) |
+On start, the demo asks you to choose:
 
-## Embedder Modes
+1. **Storage** — In-memory (default) or Persisted (file)
+2. **Existing data** — If persisted data is found, continue with it or start fresh
+3. **Embedder** — Local (default), OpenAI, or Ollama (skipped when reusing persisted data)
 
-| Mode | Flag | Dimensions | Notes |
-|------|------|------------|-------|
-| Local | *(default)* | 64 | Trigram hash-based, zero dependencies, fully offline |
-| OpenAI | `--openai` | 1536 | Uses `text-embedding-3-small`, falls back to local if `OPENAI_API_KEY` is not set |
-| Ollama | `--ollama` | 768 | Uses `nomic-embed-text`, requires a running [Ollama](https://ollama.com/) server (see [setup guide](../../docs/ollama.md)) |
+Based on your selections, the demo runs through the relevant steps:
+
+| Step | Description | When |
+|------|-------------|------|
+| **Initialize** | Creates a Trovec instance with selected embedder, storage, and config | Always |
+| **Restore from File** | Deserializes previously persisted data | Reusing persisted data |
+| **Embed & Store** | Embeds 64 sample documents and stores them with metadata | Fresh start |
+| **Persist to File** | Flushes to disk with Brotli compression, shows compression ratio | Persisted + fresh |
+| **Serialize to Memory** | Flushes to in-memory buffer, shows buffer size | In-memory + fresh |
+| **Similarity Search** | Runs 3 semantic queries and ranks results by cosine similarity | Always |
+| **Filtered Query** | Searches with a metadata filter (category = animals) | Always |
+| **Final Stats** | Prints database statistics | Always |
+
+Persisted data is kept between runs in `.trovec/` so you can reuse it on the next start.
+
+## Embedders
+
+| Mode | Dimensions | Notes |
+|------|------------|-------|
+| Local | 64 | Trigram hash-based, zero dependencies, fully offline |
+| OpenAI | 1536 | Uses `text-embedding-3-small`, requires API key |
+| Ollama | 768 | Uses `nomic-embed-text`, requires a running [Ollama](https://ollama.com/) server (see [setup guide](../docs/ollama.md)) |
+
+When selecting OpenAI, the demo looks for `OPENAI_API_KEY` in `.trovec/.env`, then in your environment. If not found, it will prompt you to enter the key (masked), and save it to `.trovec/.env` for future runs.
 
 ### What to Expect from Each Mode
 
@@ -77,6 +83,20 @@ For development and CI, local is fine. For evaluating real search quality locall
   ║          Vector Database Library for Node.js                 ║
   ╚══════════════════════════════════════════════════════════════╝
 
+  This demo walks through Trovec's core features: embedding documents,
+  persisting data, and running similarity searches. Choose your options below.
+
+  Storage:
+    [1] In-memory (default)
+    [2] Persisted (file)
+  > 1
+
+  Embedder:
+    [1] Local (no setup needed) (default)
+    [2] OpenAI (requires API key)
+    [3] Ollama (requires running server)
+  > 1
+
    STEP 1  Initialize Trovec Instance
   ────────────────────────────────────────────────────────────────
     Embedder: Local (trigram hash)
@@ -88,22 +108,22 @@ For development and CI, local is fine. For evaluating real search quality locall
 
    STEP 2  Embed & Store Documents
   ────────────────────────────────────────────────────────────────
-    Documents: 8 entries to embed and store
+    Documents: 64 entries to embed and store
 
-    › doc-1 (0.4ms)
-       "Cats are independent and curious animals"
+    › doc-01 (0.4ms)
+       "Cats are independent and curious animals that have been domesticated for thousands of years"
        → [0.0000, 0.0000, -0.1033, -0.0516, -0.0516, ... ] (64 dims)
     ...
-    ✓ Stored 8 entries
+    ✓ Stored 64 entries
 
-   STEP 5  Similarity Search
+   STEP 4  Similarity Search
   ────────────────────────────────────────────────────────────────
 
     Query: "pets and animals" (Broad animal query)
     Results (top 3):
-    #1  doc-1  score=0.4698 {"category":"animals","source":"encyclopedia"}
-    #2  doc-2  score=0.3325 {"category":"animals","source":"encyclopedia"}
-    #3  doc-8  score=0.2362 {"category":"food","source":"wiki"}
+    #1  doc-01  score=0.4698 {"category":"animals","source":"encyclopedia"}
+    #2  doc-02  score=0.3325 {"category":"animals","source":"encyclopedia"}
+    #3  doc-08  score=0.2362 {"category":"food","source":"wiki"}
 
    DONE  Demo completed successfully.
 ```
