@@ -2,14 +2,13 @@
 
 A lightweight, zero-dependency vector database library for Node.js. Store, query, and persist vector embeddings with support for multiple quantization types and similarity metrics.
 
-Built to the [Trovec Specification (VCS-1) v1.0.1](docs/spec.md).
-
 ## Features
 
 - **Zero runtime dependencies** — only Node.js required
 - **Multiple quantization modes** — F32 (full precision), INT8 (compressed), BIT (binary)
 - **Four similarity metrics** — Cosine, Euclidean, Dot Product, Hamming
-- **Functional API** — stateless functions, no classes, fully tree-shakeable
+- **Fluent API** — `db.add()`, `db.query()`, `db.queryByText()` — clean and discoverable
+- **Functional API** — stateless functions for tree-shaking and backward compatibility
 - **Dual ESM/CJS** — works with both `import` and `require`
 - **TypeScript-first** — full type definitions included
 - **Mixed ID types** — supports both `string` and `bigint` entry IDs
@@ -26,18 +25,18 @@ npm install @trovec/core
 ### Basic Usage
 
 ```typescript
-import { create, add, query } from '@trovec/core';
+import { create } from '@trovec/core';
 
 // 1. Create an instance
 const db = create({ dimensions: 3 });
 
 // 2. Add entries
-add(db, { id: 'cat', embedding: [0.9, 0.1, 0.0], context: { type: 'animal' } });
-add(db, { id: 'dog', embedding: [0.8, 0.2, 0.0], context: { type: 'animal' } });
-add(db, { id: 'car', embedding: [0.0, 0.1, 0.9], context: { type: 'vehicle' } });
+db.add({ id: 'cat', embedding: [0.9, 0.1, 0.0], context: { type: 'animal' } });
+db.add({ id: 'dog', embedding: [0.8, 0.2, 0.0], context: { type: 'animal' } });
+db.add({ id: 'car', embedding: [0.0, 0.1, 0.9], context: { type: 'vehicle' } });
 
 // 3. Query for similar vectors
-const results = query(db, { vector: [1, 0, 0], topK: 2 });
+const results = db.query({ vector: [1, 0, 0], topK: 2 });
 
 console.log(results);
 // [
@@ -49,7 +48,7 @@ console.log(results);
 ### With Quantization and Filtering
 
 ```typescript
-import { create, addMany, query } from '@trovec/core';
+import { create } from '@trovec/core';
 
 const db = create({
   dimensions: 128,
@@ -58,14 +57,14 @@ const db = create({
 });
 
 // Batch insert
-addMany(db, [
+db.addMany([
   { id: 1n, embedding: new Array(128).fill(0.5), context: { category: 'A' } },
   { id: 2n, embedding: new Array(128).fill(0.3), context: { category: 'B' } },
   { id: 3n, embedding: new Array(128).fill(0.7), context: { category: 'A' } },
 ]);
 
 // Query with filter
-const results = query(db, {
+const results = db.query({
   vector: new Array(128).fill(0.6),
   topK: 5,
   filter: (ctx) => ctx?.category === 'A',
@@ -75,29 +74,28 @@ const results = query(db, {
 ### Persistence
 
 ```typescript
-import { create, add, flush, deserialize } from '@trovec/core';
-import { createMemoryDriver } from '@trovec/core';
+import { create, createMemoryDriver } from '@trovec/core';
 
 const driver = createMemoryDriver();
 const db = create({ dimensions: 3, storageDriver: driver });
 
-add(db, { id: 'a', embedding: [1, 2, 3] });
+db.add({ id: 'a', embedding: [1, 2, 3] });
 
 // Persist to storage
-await flush(db);
+await db.flush();
 
 // Later: restore into a new instance
 const db2 = create({ dimensions: 3, storageDriver: driver });
 const buffer = await driver.read(db.collectionId);
-if (buffer) deserialize(buffer, db2);
+if (buffer) db2.deserialize(buffer);
 ```
 
 ### Text Embedding (with adapter)
 
-Trovec provides an `Embedder` interface for text-to-vector conversion. Install an adapter package, then use text-based convenience functions:
+Trovec provides an `Embedder` interface for text-to-vector conversion. Install an adapter package, then use text-based methods:
 
 ```typescript
-import { create, addWithText, queryByText } from '@trovec/core';
+import { create } from '@trovec/core';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai'; // adapter package
 
 const db = create({
@@ -106,11 +104,11 @@ const db = create({
 });
 
 // Add entries using text — embedding happens automatically
-await addWithText(db, { id: 'doc1', text: 'The cat sat on the mat', context: { source: 'book' } });
-await addWithText(db, { id: 'doc2', text: 'Dogs love to play fetch' });
+await db.addWithText({ id: 'doc1', text: 'The cat sat on the mat', context: { source: 'book' } });
+await db.addWithText({ id: 'doc2', text: 'Dogs love to play fetch' });
 
 // Query using text
-const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
+const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 ```
 
 > **No built-in embedder is included** — this keeps Trovec zero-dependency. Available adapters:
@@ -125,28 +123,30 @@ const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 
 ## API Reference
 
+`create()` returns a `Trovec` object with bound methods. All examples below use the fluent style. A functional API is also available for tree-shaking and backward compatibility (see [Functional API](#functional-api)).
+
 ### Lifecycle
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `create` | `(config: TrovecConfig) => TrovecInstance` | Create a new instance |
-| `flush` | `(instance: TrovecInstance) => Promise<void>` | Persist all data to storage |
-| `stats` | `(instance: TrovecInstance) => TrovecStats` | Get instance statistics |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `create` | `(config: TrovecConfig) => Trovec` | Create a new instance |
+| `db.flush()` | `() => Promise<void>` | Persist all data to storage |
+| `db.stats()` | `() => TrovecStats` | Get instance statistics |
 
 ### Collection Operations
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `add` | `(instance, entry: Entry) => void` | Insert or replace an entry |
-| `addMany` | `(instance, entries: Entry[]) => void` | Atomic batch insert (all-or-nothing) |
-| `delete` | `(instance, id: EntryId) => boolean` | Remove an entry, returns `true` if it existed |
-| `get` | `(instance, id: EntryId) => Entry \| undefined` | Retrieve an entry by ID |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `db.add(entry)` | `(entry: Entry) => void` | Insert or replace an entry |
+| `db.addMany(entries)` | `(entries: Entry[]) => void` | Atomic batch insert (all-or-nothing) |
+| `db.delete(id)` | `(id: EntryId) => boolean` | Remove an entry, returns `true` if it existed |
+| `db.get(id)` | `(id: EntryId) => Entry \| undefined` | Retrieve an entry by ID |
 
 ### Query
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `query` | `(instance, params: QueryParams) => QueryResult[]` | Similarity search |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `db.query(params)` | `(params: QueryParams) => QueryResult[]` | Similarity search |
 
 **QueryParams:**
 - `vector: number[]` — the query vector
@@ -155,15 +155,37 @@ const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 
 ### Embedder (text-based operations)
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `embed` | `(instance, input: string) => Promise<EmbedResult>` | Embed a single string |
-| `embedMany` | `(instance, input: string[]) => Promise<EmbedResult[]>` | Embed multiple strings |
-| `addWithText` | `(instance, entry: TextEntry) => Promise<void>` | Embed text and add entry |
-| `addManyWithText` | `(instance, entries: TextEntry[]) => Promise<void>` | Batch embed and add entries |
-| `queryByText` | `(instance, params: TextQueryParams) => Promise<QueryResult[]>` | Embed query text and search |
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `db.embed(input)` | `(input: string) => Promise<EmbedResult>` | Embed a single string |
+| `db.embedMany(input)` | `(input: string[]) => Promise<EmbedResult[]>` | Embed multiple strings |
+| `db.addWithText(entry)` | `(entry: TextEntry) => Promise<void>` | Embed text and add entry |
+| `db.addManyWithText(entries)` | `(entries: TextEntry[]) => Promise<void>` | Batch embed and add entries |
+| `db.queryByText(params)` | `(params: TextQueryParams) => Promise<QueryResult[]>` | Embed query text and search |
 
-All functions throw `TrovecError` if no embedder is configured.
+All embedder methods throw `TrovecError` if no embedder is configured.
+
+### Serialization
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `db.serialize()` | `() => Buffer` | Serialize all entries to a binary buffer |
+| `db.deserialize(buffer)` | `(buffer: Buffer) => void` | Restore entries from a binary buffer |
+
+### Functional API
+
+Every fluent method is also available as a standalone function that takes the instance as the first argument. This is useful for tree-shaking or when you prefer a functional style:
+
+```typescript
+import { create, add, query, flush } from '@trovec/core';
+
+const db = create({ dimensions: 3 });
+add(db, { id: 'a', embedding: [1, 2, 3] });
+const results = query(db, { vector: [1, 2, 3], topK: 1 });
+await flush(db);
+```
+
+`Trovec` objects are fully compatible with functional functions — you can mix and match both styles.
 
 ### Configuration
 
@@ -184,10 +206,11 @@ interface TrovecConfig {
 ```
 src/
   index.ts                   Public API barrel export
-  types.ts                   All type definitions
+  types.ts                   All type definitions (including Trovec interface)
   errors.ts                  TrovecError, DimensionMismatchError, InvalidConfigError
   validation.ts              Config/embedding validation, ID serialization
   core.ts                    create(), flush(), stats()
+  fluent.ts                  wrapInstance() — binds methods to create the Trovec object
   collection.ts              add(), addMany(), delete(), get()
   query.ts                   Brute-force similarity search
   embedder.ts                Text-based convenience functions (embed, addWithText, queryByText)
@@ -210,7 +233,7 @@ src/
 
 ### How It Works
 
-1. **`create()`** validates configuration, resolves the quantization codec and similarity function once, and returns an instance holding an empty entry map.
+1. **`create()`** validates configuration, resolves the quantization codec and similarity function once, and returns a `Trovec` object — the raw instance enriched with bound methods that delegate to the functional implementations (zero logic duplication).
 
 2. **`add()` / `addMany()`** validates embedding dimensions, quantizes the vector through the codec, and stores the quantized representation in a `Map<string, StoredEntry>`. `addMany` validates all entries before mutating any state (atomic semantics).
 

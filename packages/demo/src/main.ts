@@ -1,17 +1,8 @@
 import {
   create,
-  add,
-  addWithText,
-  addManyWithText,
-  queryByText,
-  query,
-  get,
-  stats,
-  flush,
-  deserialize,
   createMemoryDriver,
 } from '@trovec/core';
-import type { TrovecInstance, Embedder } from '@trovec/core';
+import type { Embedder } from '@trovec/core';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 import { createOllamaEmbedder } from '@trovec/embedder-ollama';
@@ -166,10 +157,10 @@ async function main() {
 
   for (const doc of DOCUMENTS) {
     const startTime = performance.now();
-    await addWithText(db, doc);
+    await db.addWithText(doc);
     const elapsed = (performance.now() - startTime).toFixed(1);
 
-    const entry = get(db, doc.id)!;
+    const entry = db.get(doc.id)!;
     const preview = embeddingPreview(entry.embedding);
     bullet(
       `${c.cyan}${doc.id}${c.reset} ${c.dim}(${elapsed}ms)${c.reset}\n` +
@@ -179,14 +170,14 @@ async function main() {
   }
 
   console.log();
-  const s = stats(db);
+  const s = db.stats();
   success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries${c.reset}`);
 
   // ── Step 3: Persist to Storage ──────────────────────────────────────────────
 
   step(3, 'Persist to Storage');
 
-  await flush(db);
+  await db.flush();
   const buffer = await driver.read(db.collectionId);
   info('Collection ID', db.collectionId);
   info('Buffer size', buffer ? `${buffer.length} bytes` : 'N/A');
@@ -205,10 +196,10 @@ async function main() {
   });
 
   if (buffer) {
-    deserialize(buffer, db2);
+    db2.deserialize(buffer);
   }
 
-  const s2 = stats(db2);
+  const s2 = db2.stats();
   info('Restored entries', String(s2.entryCount));
   success(`New instance loaded from storage${c.dim} (same data, fresh instance)${c.reset}`);
 
@@ -221,7 +212,7 @@ async function main() {
     console.log(`${INDENT}  ${c.magenta}${c.bold}Query:${c.reset} "${q.text}" ${c.dim}(${q.description})${c.reset}`);
 
     const startTime = performance.now();
-    const results = await queryByText(db2, { text: q.text, topK: 3 });
+    const results = await db2.queryByText({ text: q.text, topK: 3 });
     const elapsed = (performance.now() - startTime).toFixed(1);
 
     console.log(`${INDENT}  ${c.dim}Results (top 3, ${elapsed}ms):${c.reset}`);
@@ -237,7 +228,7 @@ async function main() {
 
   console.log(`${INDENT}  ${c.magenta}${c.bold}Query:${c.reset} "curious creatures" ${c.dim}(filter: category = animals)${c.reset}`);
 
-  const filtered = await queryByText(db2, {
+  const filtered = await db2.queryByText({
     text: 'curious creatures',
     topK: 5,
     filter: (ctx) => ctx?.category === 'animals',
@@ -252,7 +243,7 @@ async function main() {
 
   step(7, 'Final Stats');
 
-  const finalStats = stats(db2);
+  const finalStats = db2.stats();
   info('Total entries', String(finalStats.entryCount));
   info('Dimensions', String(finalStats.dimensions));
   info('Quantization', finalStats.quantization);

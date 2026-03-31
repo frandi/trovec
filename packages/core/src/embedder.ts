@@ -1,4 +1,4 @@
-import type { TrovecInstance, EntryId, Entry, QueryParams, QueryResult, EmbedResult } from './types.js';
+import type { TrovecInstance, Entry, QueryParams, QueryResult, EmbedResult, TextEntry, TextQueryParams } from './types.js';
 import { add, addMany } from './collection.js';
 import { query } from './query.js';
 import { TrovecError } from './errors.js';
@@ -22,12 +22,6 @@ export async function embedMany(instance: TrovecInstance, input: string[]): Prom
   return getEmbedder(instance).embedMany(input);
 }
 
-export interface TextEntry {
-  id: EntryId;
-  text: string;
-  context?: Record<string, unknown>;
-}
-
 export async function addWithText(instance: TrovecInstance, entry: TextEntry): Promise<void> {
   const embedder = getEmbedder(instance);
   const { embedding } = await embedder.embed(entry.text);
@@ -46,12 +40,6 @@ export async function addManyWithText(instance: TrovecInstance, entries: TextEnt
   }));
 
   addMany(instance, fullEntries);
-}
-
-export interface TextQueryParams {
-  text: string;
-  topK?: number;
-  filter?: (context: Record<string, unknown> | undefined) => boolean;
 }
 
 export async function queryByText(instance: TrovecInstance, params: TextQueryParams): Promise<QueryResult[]> {
