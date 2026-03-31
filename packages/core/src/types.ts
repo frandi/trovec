@@ -95,3 +95,45 @@ export interface TrovecInstance {
   dirty: boolean;
   collectionId: string;
 }
+
+// === Text types (used by embedder + fluent API) ===
+
+export interface TextEntry {
+  id: EntryId;
+  text: string;
+  context?: Record<string, unknown>;
+}
+
+export interface TextQueryParams {
+  text: string;
+  topK?: number;
+  filter?: (context: Record<string, unknown> | undefined) => boolean;
+}
+
+// === Fluent API ===
+
+export interface Trovec extends TrovecInstance {
+  // Collection
+  add(entry: Entry): void;
+  addMany(entries: Entry[]): void;
+  get(id: EntryId): Entry | undefined;
+  delete(id: EntryId): boolean;
+
+  // Query
+  query(params: QueryParams): QueryResult[];
+
+  // Core
+  stats(): TrovecStats;
+  flush(): Promise<void>;
+
+  // Embedder (requires embedder in config)
+  embed(input: string): Promise<EmbedResult>;
+  embedMany(input: string[]): Promise<EmbedResult[]>;
+  addWithText(entry: TextEntry): Promise<void>;
+  addManyWithText(entries: TextEntry[]): Promise<void>;
+  queryByText(params: TextQueryParams): Promise<QueryResult[]>;
+
+  // Serialization
+  serialize(): Buffer;
+  deserialize(buffer: Buffer): void;
+}

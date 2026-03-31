@@ -1,19 +1,20 @@
-import type { TrovecConfig, TrovecInstance, TrovecStats } from './types.js';
+import type { TrovecConfig, TrovecInstance, TrovecStats, Trovec } from './types.js';
 import { validateConfig } from './validation.js';
 import { getCodec } from './quantization/index.js';
 import { getMetric } from './similarity/index.js';
 import { serialize } from './serialization.js';
+import { wrapInstance } from './fluent.js';
 
 let instanceCounter = 0;
 
-export function create(config: TrovecConfig): TrovecInstance {
+export function create(config: TrovecConfig): Trovec {
   const resolved = validateConfig(config);
 
   const codec = getCodec(resolved.quantization);
   const similarityFn = getMetric(resolved.metric);
   const collectionId = `trovec_${++instanceCounter}`;
 
-  return {
+  const instance: TrovecInstance = {
     config: Object.freeze(resolved),
     entries: new Map(),
     codec,
@@ -21,6 +22,8 @@ export function create(config: TrovecConfig): TrovecInstance {
     dirty: false,
     collectionId,
   };
+
+  return wrapInstance(instance);
 }
 
 export async function flush(instance: TrovecInstance): Promise<void> {
