@@ -4,8 +4,10 @@ import {
   createFileDriver,
 } from '@trovec/core';
 import type { Embedder } from '@trovec/core';
-import { stat } from 'node:fs/promises';
+import { stat, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
+import { stdin, stdout } from 'node:process';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 import { createOllamaEmbedder } from '@trovec/embedder-ollama';
@@ -75,8 +77,134 @@ function embeddingPreview(embedding: number[]): string {
   return `[${preview}, ... ] ${c.dim}(${embedding.length} dims)${c.reset}`;
 }
 
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// ─── Prompt Helpers ───────────────────────────────────────────────────────────
+
+async function askChoice(
+  rl: ReturnType<typeof createInterface>,
+  label: string,
+  options: string[],
+  defaultIndex: number,
+): Promise<number> {
+  console.log();
+  console.log(`${INDENT}${c.bold}${label}${c.reset}`);
+  for (let i = 0; i < options.length; i++) {
+    const marker = i === defaultIndex ? ` ${c.dim}(default)${c.reset}` : '';
+    console.log(`${INDENT}  ${c.cyan}[${i + 1}]${c.reset} ${options[i]}${marker}`);
+  }
+
+  const answer = await rl.question(`${INDENT}  ${c.gray}> ${c.reset}`);
+  const trimmed = answer.trim();
+
+  if (trimmed === '') return defaultIndex;
+
+  const num = parseInt(trimmed, 10);
+  if (num >= 1 && num <= options.length) return num - 1;
+
+  warn(`Invalid choice "${trimmed}", using default.`);
+  return defaultIndex;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const DEMO_DIR = '.trovec';
+const DIMENSIONS_LOCAL = 64;
+const DIMENSIONS_OPENAI = 1536;
+const DIMENSIONS_OLLAMA = 768;
+
+const ENV_FILE = join(DEMO_DIR, '.env');
+
+async function loadEnvApiKey(): Promise<string | undefined> {
+  try {
+    const content = await readFile(ENV_FILE, 'utf-8');
+    const match = content.match(/^OPENAI_API_KEY=(.+)$/m);
+    return match?.[1]?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function saveEnvApiKey(apiKey: string): Promise<void> {
+  await mkdir(DEMO_DIR, { recursive: true });
+  await writeFile(ENV_FILE, `OPENAI_API_KEY=${apiKey}\n`, 'utf-8');
+}
+
+async function askMaskedInput(
+  rl: ReturnType<typeof createInterface>,
+  label: string,
+): Promise<string> {
+  // Mask input by intercepting keystrokes
+  const maskHandler = (_: string, key: { name?: string }) => {
+    if (key?.name !== 'return' && key?.name !== 'enter') {
+      stdout.write('\x1b[2K\x1b[G' + `${INDENT}  ${c.gray}> ${c.reset}` + '*'.repeat((rl as any).line?.length ?? 0));
+    }
+  };
+  stdin.on('keypress', maskHandler);
+  const answer = await rl.question(`${INDENT}  ${c.gray}> ${c.reset}`);
+  stdin.removeListener('keypress', maskHandler);
+  return answer.trim();
+}
+
+async function resolveOpenAIKey(rl: ReturnType<typeof createInterface>): Promise<string> {
+  // Check .trovec/.env first, then process.env
+  const envKey = await loadEnvApiKey();
+  if (envKey) {
+    bullet(`API key loaded from ${ENV_FILE}`);
+    return envKey;
+  }
+
+  if (process.env.OPENAI_API_KEY) {
+    bullet('API key loaded from environment');
+    return process.env.OPENAI_API_KEY;
+  }
+
+  // Prompt user
+  console.log();
+  console.log(`${INDENT}  ${c.yellow}OPENAI_API_KEY not found.${c.reset}`);
+  console.log(`${INDENT}  Enter your OpenAI API key (will be saved to ${c.dim}${ENV_FILE}${c.reset}):`);
+  const apiKey = await askMaskedInput(rl, 'API key');
+
+  if (!apiKey) {
+    throw new Error('OpenAI API key is required.');
+  }
+
+  await saveEnvApiKey(apiKey);
+  success(`API key saved to ${ENV_FILE}`);
+  return apiKey;
+}
+
+async function resolveEmbedder(
+  choice: number,
+  rl: ReturnType<typeof createInterface>,
+  dimensions?: number,
+): Promise<{ embedder: Embedder; name: string; dimensions: number }> {
+  if (choice === 1) {
+    const apiKey = await resolveOpenAIKey(rl);
+    return {
+      embedder: createOpenAIEmbedder({ apiKey, model: 'text-embedding-3-small' }),
+      name: 'OpenAI (text-embedding-3-small)',
+      dimensions: DIMENSIONS_OPENAI,
+    };
+  }
+
+  if (choice === 2) {
+    return {
+      embedder: createOllamaEmbedder({ model: 'nomic-embed-text' }),
+      name: 'Ollama (nomic-embed-text)',
+      dimensions: DIMENSIONS_OLLAMA,
+    };
+  }
+
+  return {
+    embedder: createLocalEmbedder({ dimensions: dimensions ?? DIMENSIONS_LOCAL, warn: false }),
+    name: 'Local (trigram hash)',
+    dimensions: dimensions ?? DIMENSIONS_LOCAL,
+  };
+}
+
+function detectEmbedderFromDimensions(dims: number): { choice: number; label: string } {
+  if (dims === DIMENSIONS_OPENAI) return { choice: 1, label: 'OpenAI' };
+  if (dims === DIMENSIONS_OLLAMA) return { choice: 2, label: 'Ollama' };
+  return { choice: 0, label: 'Local' };
 }
 
 // ─── Demo Data ────────────────────────────────────────────────────────────────
@@ -90,161 +218,179 @@ const QUERIES = [
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const useOpenAI = process.argv.includes('--openai');
-  const useOllama = process.argv.includes('--ollama');
-  const DIMENSIONS = 64;
-
   banner();
 
-  // ── Step 1: Initialize ──────────────────────────────────────────────────────
+  console.log(`${INDENT}${c.dim}This demo walks through Trovec's core features: embedding documents,${c.reset}`);
+  console.log(`${INDENT}${c.dim}persisting data, and running similarity searches. Choose your options below.${c.reset}`);
 
-  step(1, 'Initialize Trovec Instance');
+  const rl = createInterface({ input: stdin, output: stdout });
+
+  // ── Prompt: Storage ─────────────────────────────────────────────────────────
+
+  const storageChoice = await askChoice(rl, 'Storage:', ['In-memory', 'Persisted (file)'], 0);
+  const usePersisted = storageChoice === 1;
+
+  // ── Prompt: Reuse or start fresh (if persisted + data exists) ────────────────
+
+  let reuseBuffer: Buffer | null = null;
+  let fileDriver = usePersisted ? createFileDriver({ directory: DEMO_DIR }) : null;
 
   let embedder: Embedder;
   let embedderName: string;
+  let dimensions: number;
 
-  if (useOpenAI) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      warn('OPENAI_API_KEY not set. Falling back to local embedder.');
-      embedder = createLocalEmbedder({ dimensions: DIMENSIONS, warn: false });
-      embedderName = 'Local (trigram hash)';
+  if (fileDriver && await fileDriver.exists('trovec_1')) {
+    const existingBuffer = await fileDriver.read('trovec_1');
+    const storedDims = existingBuffer!.readUInt32LE(5);
+    const detected = detectEmbedderFromDimensions(storedDims);
+    const detectedLabel = detectEmbedderFromDimensions(storedDims).label;
+
+    const reuseChoice = await askChoice(
+      rl,
+      `Existing data found (embedder: ${detectedLabel}, ${storedDims} dims):`,
+      ['Continue with existing data', 'Start fresh'],
+      0,
+    );
+
+    if (reuseChoice === 0) {
+      reuseBuffer = existingBuffer;
+      const detectedResolved = await resolveEmbedder(detected.choice, rl, storedDims);
+      embedder = detectedResolved.embedder;
+      embedderName = detectedResolved.name;
+      dimensions = storedDims;
     } else {
-      embedder = createOpenAIEmbedder({ apiKey, model: 'text-embedding-3-small' });
-      embedderName = 'OpenAI (text-embedding-3-small)';
+      await fileDriver.delete('trovec_1');
+      const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
+      const resolved = await resolveEmbedder(embedderChoice, rl);
+      embedder = resolved.embedder;
+      embedderName = resolved.name;
+      dimensions = resolved.dimensions;
     }
-  } else if (useOllama) {
-    embedder = createOllamaEmbedder({ model: 'nomic-embed-text' });
-    embedderName = 'Ollama (nomic-embed-text)';
   } else {
-    embedder = createLocalEmbedder({ dimensions: DIMENSIONS, warn: false });
-    embedderName = 'Local (trigram hash)';
+    // ── Prompt: Embedder (in-memory or persisted with no existing data) ────────
+    const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
+    const resolved = await resolveEmbedder(embedderChoice, rl);
+    embedder = resolved.embedder;
+    embedderName = resolved.name;
+    dimensions = resolved.dimensions;
   }
 
-  const dimensions = embedderName.startsWith('OpenAI') ? 1536
-    : embedderName.startsWith('Ollama') ? 768
-    : DIMENSIONS;
-  const driver = createMemoryDriver();
+  rl.close();
 
+  // ── Step counter ────────────────────────────────────────────────────────────
+
+  let stepNum = 0;
+  const nextStep = (title: string) => step(++stepNum, title);
+
+  // ── Step: Initialize ────────────────────────────────────────────────────────
+
+  nextStep('Initialize Trovec Instance');
+
+  const storageDriver = fileDriver ?? createMemoryDriver();
   const db = create({
     dimensions,
     quantization: 'F32',
     metric: 'cosine',
     embedder,
-    storageDriver: driver,
+    storageDriver,
   });
 
   info('Embedder', embedderName);
   info('Dimensions', String(dimensions));
   info('Quantization', db.config.quantization);
   info('Metric', db.config.metric);
-  info('Storage', 'MemoryDriver');
+  info('Storage', fileDriver ? `FileDriver (${DEMO_DIR}/)` : 'MemoryDriver');
   success('Instance created');
 
-  // ── Step 2: Embed & Store Documents ─────────────────────────────────────────
+  // ── Step: Restore or Embed ──────────────────────────────────────────────────
 
-  step(2, 'Embed & Store Documents');
+  if (reuseBuffer) {
+    // Path C: Restore from existing file
+    nextStep('Restore from File Storage');
 
-  info('Documents', `${DOCUMENTS.length} entries to embed and store`);
-  console.log();
+    const restoreStart = performance.now();
+    db.deserialize(reuseBuffer);
+    const restoreElapsed = (performance.now() - restoreStart).toFixed(1);
 
-  for (const doc of DOCUMENTS) {
-    const startTime = performance.now();
-    await db.addWithText(doc);
-    const elapsed = (performance.now() - startTime).toFixed(1);
+    const s = db.stats();
+    info('Restored entries', String(s.entryCount));
+    info('Restore time', `${restoreElapsed}ms`);
+    success(`Loaded from file${c.dim} (decompressed + deserialized)${c.reset}`);
+  } else {
+    // Path A/B: Embed fresh documents
+    nextStep('Embed & Store Documents');
 
-    const entry = db.get(doc.id)!;
-    const preview = embeddingPreview(entry.embedding);
-    bullet(
-      `${c.cyan}${doc.id}${c.reset} ${c.dim}(${elapsed}ms)${c.reset}\n` +
-      `${INDENT}     ${c.dim}"${doc.text}"${c.reset}\n` +
-      `${INDENT}     ${c.dim}→${c.reset} ${preview}`
-    );
+    info('Documents', `${DOCUMENTS.length} entries to embed and store`);
+    console.log();
+
+    for (const doc of DOCUMENTS) {
+      const startTime = performance.now();
+      await db.addWithText(doc);
+      const elapsed = (performance.now() - startTime).toFixed(1);
+
+      const entry = db.get(doc.id)!;
+      const preview = embeddingPreview(entry.embedding);
+      bullet(
+        `${c.cyan}${doc.id}${c.reset} ${c.dim}(${elapsed}ms)${c.reset}\n` +
+        `${INDENT}     ${c.dim}"${doc.text}"${c.reset}\n` +
+        `${INDENT}     ${c.dim}→${c.reset} ${preview}`
+      );
+    }
+
+    console.log();
+    const s = db.stats();
+    success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries${c.reset}`);
+
+    // Persist
+    if (fileDriver) {
+      // Path B: Persist to file
+      nextStep('Persist to File Storage (Brotli Compression)');
+
+      const flushStart = performance.now();
+      await db.flush();
+      const flushElapsed = (performance.now() - flushStart).toFixed(1);
+
+      const memDriver = createMemoryDriver();
+      const dbTemp = create({ dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver });
+      for (const doc of DOCUMENTS) {
+        dbTemp.add(db.get(doc.id)!);
+      }
+      await dbTemp.flush();
+      const rawBuffer = await memDriver.read(dbTemp.collectionId);
+      const rawSize = rawBuffer ? rawBuffer.length : 0;
+
+      const fileStat = await stat(join(fileDriver.directory, `${db.collectionId}.trovec`));
+      const fileSize = fileStat.size;
+      const ratio = rawSize > 0 ? ((1 - fileSize / rawSize) * 100).toFixed(1) : '0';
+
+      info('Directory', fileDriver.directory);
+      info('Compression', 'Brotli (quality 1)');
+      info('Raw size', `${rawSize} bytes`);
+      info('File size', `${fileSize} bytes (${ratio}% smaller)`);
+      info('Flush time', `${flushElapsed}ms`);
+      success('Persisted to file system');
+    } else {
+      // Path A: Serialize to memory
+      nextStep('Serialize to Memory Storage');
+
+      await db.flush();
+      const buffer = await (storageDriver as ReturnType<typeof createMemoryDriver>).read(db.collectionId);
+      info('Collection ID', db.collectionId);
+      info('Buffer size', buffer ? `${buffer.length} bytes` : 'N/A');
+      success('Flushed to MemoryDriver');
+    }
   }
 
-  console.log();
-  const s = db.stats();
-  success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries${c.reset}`);
+  // ── Step: Similarity Search ─────────────────────────────────────────────────
 
-  // ── Step 3: Persist to Memory Storage ────────────────────────────────────────
-
-  step(3, 'Persist to Memory Storage');
-
-  await db.flush();
-  const buffer = await driver.read(db.collectionId);
-  info('Collection ID', db.collectionId);
-  info('Buffer size', buffer ? `${buffer.length} bytes` : 'N/A');
-  success('Flushed to MemoryDriver');
-
-  // ── Step 4: Persist to File Storage (with Brotli compression) ──────────────
-
-  step(4, 'Persist to File Storage (Brotli Compression)');
-
-  const fileDriver = createFileDriver({ directory: '.trovec-demo' });
-  const dbFile = create({
-    dimensions,
-    quantization: 'F32',
-    metric: 'cosine',
-    embedder,
-    storageDriver: fileDriver,
-  });
-
-  // Copy entries from original db
-  for (const doc of DOCUMENTS) {
-    const entry = db.get(doc.id)!;
-    dbFile.add(entry);
-  }
-
-  const flushStart = performance.now();
-  await dbFile.flush();
-  const flushElapsed = (performance.now() - flushStart).toFixed(1);
-
-  const rawSize = buffer ? buffer.length : 0;
-  const fileStat = await stat(join(fileDriver.directory, `${dbFile.collectionId}.trovec`));
-  const fileSize = fileStat.size;
-  const ratio = ((1 - fileSize / rawSize) * 100).toFixed(1);
-
-  info('Directory', fileDriver.directory);
-  info('Compression', 'Brotli (quality 1)');
-  info('Raw size', `${rawSize} bytes`);
-  info('File size', `${fileSize} bytes (${ratio}% smaller)`);
-  info('Flush time', `${flushElapsed}ms`);
-  success(`Persisted to file system`);
-
-  // ── Step 5: Restore from File Storage ──────────────────────────────────────
-
-  step(5, 'Restore from File Storage');
-
-  const db2 = create({
-    dimensions,
-    quantization: 'F32',
-    metric: 'cosine',
-    embedder,
-    storageDriver: fileDriver,
-  });
-
-  const restoreStart = performance.now();
-  const fileBuffer = await fileDriver.read(dbFile.collectionId);
-  if (fileBuffer) {
-    db2.deserialize(fileBuffer);
-  }
-  const restoreElapsed = (performance.now() - restoreStart).toFixed(1);
-
-  const s2 = db2.stats();
-  info('Restored entries', String(s2.entryCount));
-  info('Restore time', `${restoreElapsed}ms`);
-  success(`Loaded from file${c.dim} (decompressed + deserialized, fresh instance)${c.reset}`);
-
-  // ── Step 6: Similarity Search ───────────────────────────────────────────────
-
-  step(6, 'Similarity Search');
+  nextStep('Similarity Search');
 
   for (const q of QUERIES) {
     console.log();
     console.log(`${INDENT}  ${c.magenta}${c.bold}Query:${c.reset} "${q.text}" ${c.dim}(${q.description})${c.reset}`);
 
     const startTime = performance.now();
-    const results = await db2.queryByText({ text: q.text, topK: 3 });
+    const results = await db.queryByText({ text: q.text, topK: 3 });
     const elapsed = (performance.now() - startTime).toFixed(1);
 
     console.log(`${INDENT}  ${c.dim}Results (top 3, ${elapsed}ms):${c.reset}`);
@@ -254,13 +400,13 @@ async function main() {
     }
   }
 
-  // ── Step 7: Filtered Query ──────────────────────────────────────────────────
+  // ── Step: Filtered Query ────────────────────────────────────────────────────
 
-  step(7, 'Filtered Query');
+  nextStep('Filtered Query');
 
   console.log(`${INDENT}  ${c.magenta}${c.bold}Query:${c.reset} "curious creatures" ${c.dim}(filter: category = animals)${c.reset}`);
 
-  const filtered = await db2.queryByText({
+  const filtered = await db.queryByText({
     text: 'curious creatures',
     topK: 5,
     filter: (ctx) => ctx?.category === 'animals',
@@ -271,33 +417,24 @@ async function main() {
     resultRow(i + 1, String(filtered[i].id), filtered[i].score, filtered[i].context);
   }
 
-  // ── Step 8: Stats & Summary ─────────────────────────────────────────────────
+  // ── Step: Final Stats ───────────────────────────────────────────────────────
 
-  step(8, 'Final Stats');
+  nextStep('Final Stats');
 
-  const finalStats = db2.stats();
+  const finalStats = db.stats();
   info('Total entries', String(finalStats.entryCount));
   info('Dimensions', String(finalStats.dimensions));
   info('Quantization', finalStats.quantization);
   info('Metric', finalStats.metric);
   info('Index', finalStats.indexStatus);
 
-  // ── Cleanup ──────────────────────────────────────────────────────────────────
-
-  step(9, 'Cleanup');
-
-  await fileDriver.destroy();
-  info('Removed', fileDriver.directory);
-  success('File storage cleaned up');
-
   // ── Done ────────────────────────────────────────────────────────────────────
 
   console.log();
   console.log(`${INDENT}${c.bgGreen}${c.bold} DONE ${c.reset} ${c.green}Demo completed successfully.${c.reset}`);
 
-  if (!useOpenAI && !useOllama) {
-    console.log(`${INDENT}${c.dim}Tip: Run with --openai flag and set OPENAI_API_KEY for real embeddings.${c.reset}`);
-    console.log(`${INDENT}${c.dim}Tip: Run with --ollama flag for local Ollama embeddings (requires running Ollama server).${c.reset}`);
+  if (fileDriver) {
+    console.log(`${INDENT}${c.dim}Data saved to ${DEMO_DIR}/. Run again to reuse or start clean.${c.reset}`);
   }
 
   console.log();
