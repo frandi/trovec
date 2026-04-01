@@ -7,8 +7,8 @@ A proof-of-concept demonstrating [Trovec](https://www.npmjs.com/package/@trovec/
 ```
 PDF Upload ──> LiteParse (extract text per page)
            ──> Paragraph-level chunking (100-500 chars)
-           ──> Ollama embeddings (nomic-embed-text, 768d)
-           ──> Trovec vector store (cosine similarity)
+           ──> OpenAI embeddings (text-embedding-3-small, 1536d)
+           ──> Trovec vector store (cosine similarity, file-backed)
 
 Question   ──> Trovec semantic search (top-K chunks)
            ──> OpenAI GPT-5.4-mini (synthesize answer with citations)
@@ -19,8 +19,8 @@ Question   ──> Trovec semantic search (top-K chunks)
 
 | Component | Library | Purpose |
 |-----------|---------|---------|
-| Vector store | `@trovec/core` | Store and query document embeddings |
-| Embeddings | `@trovec/embedder-ollama` | Generate 768-dim vectors via local Ollama |
+| Vector store | `@trovec/core` | Store and query document embeddings (with persistent file storage) |
+| Embeddings | `@trovec/embedder-openai` | Generate 1536-dim vectors via OpenAI API |
 | PDF parsing | `@llamaindex/liteparse` | Extract text with page-level structure |
 | Answer generation | `openai` (Responses API) | Synthesize cited answers from retrieved chunks |
 | Web server | `express` | API endpoints + static file serving |
@@ -30,11 +30,10 @@ Question   ──> Trovec semantic search (top-K chunks)
 **Ingestion:**
 - LiteParse extracts text per page from the uploaded PDF
 - Each page is split into paragraph-level chunks (100-500 chars) for more focused embeddings
-- Chunks are prefixed with `search_document:` (required by nomic-embed-text) before embedding
 - Each chunk stores metadata: page number, source file, full text, and a short preview
+- Data is automatically persisted to disk via Trovec's file storage driver
 
 **Retrieval:**
-- User questions are prefixed with `search_query:` before embedding
 - Trovec performs brute-force cosine similarity search across all stored chunks
 - Top-K most relevant chunks are returned with similarity scores
 
@@ -47,16 +46,7 @@ Question   ──> Trovec semantic search (top-K chunks)
 ## Prerequisites
 
 - **Node.js** >= 18
-- **Ollama** running locally with `nomic-embed-text` model
 - **OpenAI API key**
-
-### Ollama Setup
-
-```bash
-# Install Ollama (https://ollama.com), then:
-ollama pull nomic-embed-text
-ollama serve
-```
 
 ## Getting Started
 
@@ -81,9 +71,12 @@ Open http://localhost:3737 in your browser.
 
 ## Usage
 
-1. **Upload** a PDF using the upload area
-2. **Ask** a natural language question (e.g., "What are the main security concerns?")
-3. **Review** the synthesized answer with inline citation badges and expandable source references
+The UI is split into two panels:
+
+- **Left panel** — Upload PDFs and browse the document list. Each document can be deleted, which removes its vectors, metadata record, and uploaded file.
+- **Right panel** — Ask natural language questions and review cited answers with expandable source references.
+
+Ingested data is persisted in the `.trovec` directory, so previously uploaded documents are available across restarts.
 
 ## Configuration
 
@@ -92,15 +85,15 @@ Environment variables (can be set in `.env`):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3737` | Server port |
-| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
-| `OLLAMA_MODEL` | `nomic-embed-text` | Ollama embedding model |
-| `OPENAI_API_KEY` | *(required)* | OpenAI API key for answer generation |
+| `OPENAI_API_KEY` | *(required)* | OpenAI API key for embeddings and answer generation |
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/ingest` | Upload and ingest a PDF (multipart form, field: `pdf`) |
+| `GET` | `/api/documents` | List all ingested documents |
+| `DELETE` | `/api/documents/:fileName` | Delete a document (vectors, record, and uploaded file) |
 | `GET` | `/api/search?q=...&topK=5` | Raw semantic search (returns ranked chunks) |
 | `POST` | `/api/ask` | Ask a question, get a cited answer (JSON body: `{ question, topK? }`) |
 | `GET` | `/api/status` | Vector store stats (entry count, dimensions, metric) |
@@ -110,10 +103,12 @@ Environment variables (can be set in `.env`):
 ```
 poc/pdf-rag/
 ├── .env                 # Environment variables (not committed)
+├── .trovec/             # Persisted vector store data + document registry (auto-created)
 ├── package.json
 ├── tsconfig.json
 └── src/
-    ├── main.ts          # Entry point — init Trovec, Ollama embedder, start server
+    ├── main.ts          # Entry point — init Trovec, OpenAI embedder, start server
+    ├── documents.ts     # Document registry — JSON-backed record of ingested PDFs
     ├── ingest.ts        # PDF parsing + paragraph chunking + embedding pipeline
     ├── search.ts        # Semantic search via Trovec queryByText
     ├── answer.ts        # LLM answer generation with anti-hallucination prompts

@@ -1,18 +1,19 @@
 import express from 'express';
+import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { TrovecInstance } from '@trovec/core';
-import { stats } from '@trovec/core';
+import type { Trovec } from '@trovec/core';
 import { ingestPdf } from './ingest.js';
 import { searchDocuments } from './search.js';
 import { generateAnswer } from './answer.js';
+import { getDocuments, addDocument, removeDocument } from './documents.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const upload = multer({ dest: path.join(__dirname, '..', 'uploads') });
 
-export function createServer(db: TrovecInstance, openaiApiKey: string, port: number = 3737) {
+export function createServer(db: Trovec, openaiApiKey: string, port: number = 3737) {
   const app = express();
 
   app.use(express.json());
@@ -26,6 +27,7 @@ export function createServer(db: TrovecInstance, openaiApiKey: string, port: num
       }
 
       const result = await ingestPdf(db, req.file.path, req.file.originalname);
+      addDocument({ ...result, filePath: req.file.path });
       res.json(result);
     } catch (err: any) {
       console.error('Ingest error:', err);
@@ -69,9 +71,51 @@ export function createServer(db: TrovecInstance, openaiApiKey: string, port: num
     }
   });
 
+  app.delete('/api/documents/:fileName', (_req, res) => {
+    try {
+      const fileName = _req.params.fileName;
+
+      // Delete all vectors belonging to this document
+      const keysToDelete: string[] = [];
+      for (const key of db.entries.keys()) {
+        if (key === fileName || key.startsWith(`${fileName}:`)) {
+          keysToDelete.push(key);
+        }
+      }
+      for (const key of keysToDelete) {
+        db.delete(key);
+      }
+
+      // Remove from document registry
+      const record = removeDocument(fileName);
+      if (!record && keysToDelete.length === 0) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+
+      // Delete the uploaded file
+      if (record?.filePath) {
+        fs.unlink(record.filePath, () => {});
+      }
+
+      res.json({ fileName, deletedChunks: keysToDelete.length });
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      res.status(500).json({ error: err.message ?? 'Delete failed' });
+    }
+  });
+
+  app.get('/api/documents', (_req, res) => {
+    try {
+      res.json(getDocuments());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? 'Failed to load documents' });
+    }
+  });
+
   app.get('/api/status', (_req, res) => {
     try {
-      const s = stats(db);
+      const s = db.stats();
       res.json({
         entryCount: s.entryCount,
         dimensions: s.dimensions,
@@ -83,9 +127,9 @@ export function createServer(db: TrovecInstance, openaiApiKey: string, port: num
     }
   });
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`PDF RAG POC server running at http://localhost:${port}`);
   });
 
-  return app;
+  return server;
 }

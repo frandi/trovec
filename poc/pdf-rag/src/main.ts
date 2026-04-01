@@ -1,30 +1,33 @@
 import { config } from 'dotenv';
-import { create } from '@trovec/core';
-import { createOllamaEmbedder } from '@trovec/embedder-ollama';
+import { create, createFileDriver } from '@trovec/core';
+import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 import { createServer } from './server.js';
 
 config();
 
 const PORT = parseInt(process.env.PORT ?? '3737', 10);
-const OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'nomic-embed-text';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 
 if (!OPENAI_API_KEY) {
-  console.warn('Warning: OPENAI_API_KEY is not set. The /api/ask endpoint will not work.');
+  console.error('Error: OPENAI_API_KEY is required.');
+  process.exit(1);
 }
 
-const embedder = createOllamaEmbedder({
-  model: OLLAMA_MODEL,
-  baseUrl: OLLAMA_URL,
-});
+const embedder = createOpenAIEmbedder({ apiKey: OPENAI_API_KEY });
 
-const db = create({
-  dimensions: 768,
+const db = await create({
+  dimensions: 1536,
   metric: 'cosine',
   embedder,
+  storageDriver: createFileDriver(),
 });
 
-console.log(`Using Ollama embedder (${OLLAMA_MODEL}) at ${OLLAMA_URL}`);
+console.log('Using OpenAI embedder (text-embedding-3-small)');
 
-createServer(db, OPENAI_API_KEY, PORT);
+const server = createServer(db, OPENAI_API_KEY, PORT);
+
+process.on('SIGINT', async () => {
+  await db.close();
+  server.close();
+  process.exit(0);
+});
