@@ -339,46 +339,7 @@ async function main() {
 
     console.log();
     const s = db.stats();
-    success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries${c.reset}`);
-
-    // Persist
-    if (fileDriver) {
-      // Path B: Persist to file
-      nextStep('Persist to File Storage (Brotli Compression)');
-
-      const flushStart = performance.now();
-      await db.flush();
-      const flushElapsed = (performance.now() - flushStart).toFixed(1);
-
-      const memDriver = createMemoryDriver();
-      const dbTemp = await create({ dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver });
-      for (const doc of DOCUMENTS) {
-        dbTemp.add(db.get(doc.id)!);
-      }
-      await dbTemp.flush();
-      const rawBuffer = await memDriver.read(dbTemp.collectionId);
-      const rawSize = rawBuffer ? rawBuffer.length : 0;
-
-      const fileStat = await stat(join(fileDriver.directory, `${db.collectionId}.trovec`));
-      const fileSize = fileStat.size;
-      const ratio = rawSize > 0 ? ((1 - fileSize / rawSize) * 100).toFixed(1) : '0';
-
-      info('Directory', fileDriver.directory);
-      info('Compression', 'Brotli (quality 1)');
-      info('Raw size', `${rawSize} bytes`);
-      info('File size', `${fileSize} bytes (${ratio}% smaller)`);
-      info('Flush time', `${flushElapsed}ms`);
-      success('Persisted to file system');
-    } else {
-      // Path A: Serialize to memory
-      nextStep('Serialize to Memory Storage');
-
-      await db.flush();
-      const buffer = await (storageDriver as ReturnType<typeof createMemoryDriver>).read(db.collectionId);
-      info('Collection ID', db.collectionId);
-      info('Buffer size', buffer ? `${buffer.length} bytes` : 'N/A');
-      success('Flushed to MemoryDriver');
-    }
+    success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries ${c.dim}(auto-flush will persist automatically)${c.reset}`);
   }
 
   // ── Step: Similarity Search ─────────────────────────────────────────────────
@@ -415,6 +376,36 @@ async function main() {
   console.log(`${INDENT}  ${c.dim}Results (animals only):${c.reset}`);
   for (let i = 0; i < filtered.length; i++) {
     resultRow(i + 1, String(filtered[i].id), filtered[i].score, filtered[i].context);
+  }
+
+  // ── Step: Close (flush + cleanup) ────────────────────────────────────────────
+
+  nextStep('Close Instance');
+
+  const closeStart = performance.now();
+  await db.close();
+  const closeElapsed = (performance.now() - closeStart).toFixed(1);
+
+  success(`Instance closed ${c.dim}(final flush + cleanup in ${closeElapsed}ms)${c.reset}`);
+
+  if (fileDriver) {
+    const memDriver = createMemoryDriver();
+    const dbTemp = await create({ dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver, autoFlush: false });
+    for (const doc of DOCUMENTS) {
+      const entry = db.get(doc.id);
+      if (entry) dbTemp.add(entry);
+    }
+    await dbTemp.flush();
+    const rawBuffer = await memDriver.read(dbTemp.collectionId);
+    const rawSize = rawBuffer ? rawBuffer.length : 0;
+
+    const fileStat = await stat(join(fileDriver.directory, `${db.collectionId}.trovec`));
+    const fileSize = fileStat.size;
+    const ratio = rawSize > 0 ? ((1 - fileSize / rawSize) * 100).toFixed(1) : '0';
+
+    info('Compression', 'Brotli (quality 1)');
+    info('Raw size', `${rawSize} bytes`);
+    info('File size', `${fileSize} bytes (${ratio}% smaller)`);
   }
 
   // ── Step: Final Stats ───────────────────────────────────────────────────────

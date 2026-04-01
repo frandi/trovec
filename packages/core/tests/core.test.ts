@@ -20,6 +20,7 @@ describe('create', () => {
       quantization: 'INT8',
       metric: 'euclidean',
       storageDriver: driver,
+      autoFlush: false,
     });
     expect(instance.config.dimensions).toBe(64);
     expect(instance.config.quantization).toBe('INT8');
@@ -32,11 +33,11 @@ describe('create', () => {
 
   it('auto-loads existing data from storage driver', async () => {
     const driver = createMemoryDriver();
-    const instance1 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test' });
+    const instance1 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test', autoFlush: false });
     add(instance1, { id: 'a', embedding: [1, 2] });
     await flush(instance1);
 
-    const instance2 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test' });
+    const instance2 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test', autoFlush: false });
     expect(instance2.entries.size).toBe(1);
     expect(instance2.get('a')).toBeDefined();
   });
@@ -64,7 +65,7 @@ describe('stats', () => {
 describe('flush', () => {
   it('persists data to storage driver', async () => {
     const driver = createMemoryDriver();
-    const instance = await create({ dimensions: 2, storageDriver: driver });
+    const instance = await create({ dimensions: 2, storageDriver: driver, autoFlush: false });
     add(instance, { id: 'a', embedding: [1, 2] });
 
     await flush(instance);

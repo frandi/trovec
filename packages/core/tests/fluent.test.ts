@@ -39,6 +39,7 @@ describe('fluent API', () => {
     expect(typeof db.query).toBe('function');
     expect(typeof db.stats).toBe('function');
     expect(typeof db.flush).toBe('function');
+    expect(typeof db.close).toBe('function');
     expect(typeof db.embed).toBe('function');
     expect(typeof db.embedMany).toBe('function');
     expect(typeof db.addWithText).toBe('function');

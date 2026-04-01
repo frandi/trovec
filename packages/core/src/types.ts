@@ -40,6 +40,7 @@ export interface TrovecConfig {
   storageDriver?: StorageDriver;
   embedder?: Embedder;
   collectionId?: string;
+  autoFlush?: boolean | number;
 }
 
 export interface TrovecStats {
@@ -98,6 +99,7 @@ export interface ResolvedTrovecConfig {
   storageDriver: StorageDriver;
   embedder?: Embedder;
   collectionId: string;
+  autoFlush: false | number;
 }
 
 export interface TrovecInstance {
@@ -107,6 +109,10 @@ export interface TrovecInstance {
   similarityFn: SimilarityFn;
   dirty: boolean;
   collectionId: string;
+  _scheduleFlush?: () => void;
+  _flushTimer?: ReturnType<typeof setTimeout>;
+  _flushing?: Promise<void>;
+  _beforeExitHandler?: () => void;
 }
 
 // === Text types (used by embedder + fluent API) ===
@@ -138,6 +144,7 @@ export interface Trovec extends TrovecInstance {
   // Core
   stats(): TrovecStats;
   flush(): Promise<void>;
+  close(): Promise<void>;
 
   // Embedder (requires embedder in config)
   embed(input: string): Promise<EmbedResult>;

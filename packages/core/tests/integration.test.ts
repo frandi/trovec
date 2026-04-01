@@ -53,7 +53,7 @@ describe('integration', () => {
 
   it('flush + create auto-loads state', async () => {
     const driver = createMemoryDriver();
-    const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
+    const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
     addMany(instance, [
       { id: 'x', embedding: [1, 2, 3], context: { tag: 'hello' } },
       { id: 'y', embedding: [4, 5, 6] },
@@ -62,7 +62,7 @@ describe('integration', () => {
     await flush(instance);
 
     // Create new instance — data should auto-load from storage
-    const instance2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
+    const instance2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
 
     expect(instance2.entries.size).toBe(2);
     expect(get(instance2, 'x')!.embedding).toEqual([1, 2, 3]);
