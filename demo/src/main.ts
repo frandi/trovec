@@ -107,6 +107,7 @@ async function askChoice(
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const DEMO_DIR = '.trovec';
+const COLLECTION_ID = 'demo';
 const DIMENSIONS_LOCAL = 64;
 const DIMENSIONS_OPENAI = 1536;
 const DIMENSIONS_OLLAMA = 768;
@@ -232,15 +233,15 @@ async function main() {
 
   // ── Prompt: Reuse or start fresh (if persisted + data exists) ────────────────
 
-  let reuseBuffer: Buffer | null = null;
+  let reuseData = false;
   let fileDriver = usePersisted ? createFileDriver({ directory: DEMO_DIR }) : null;
 
   let embedder: Embedder;
   let embedderName: string;
   let dimensions: number;
 
-  if (fileDriver && await fileDriver.exists('trovec_1')) {
-    const existingBuffer = await fileDriver.read('trovec_1');
+  if (fileDriver && await fileDriver.exists(COLLECTION_ID)) {
+    const existingBuffer = await fileDriver.read(COLLECTION_ID);
     const storedDims = existingBuffer!.readUInt32LE(5);
     const detected = detectEmbedderFromDimensions(storedDims);
     const detectedLabel = detectEmbedderFromDimensions(storedDims).label;
@@ -253,13 +254,13 @@ async function main() {
     );
 
     if (reuseChoice === 0) {
-      reuseBuffer = existingBuffer;
+      reuseData = true;
       const detectedResolved = await resolveEmbedder(detected.choice, rl, storedDims);
       embedder = detectedResolved.embedder;
       embedderName = detectedResolved.name;
       dimensions = storedDims;
     } else {
-      await fileDriver.delete('trovec_1');
+      await fileDriver.delete(COLLECTION_ID);
       const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
       const resolved = await resolveEmbedder(embedderChoice, rl);
       embedder = resolved.embedder;
@@ -287,35 +288,34 @@ async function main() {
   nextStep('Initialize Trovec Instance');
 
   const storageDriver = fileDriver ?? createMemoryDriver();
-  const db = create({
+  const createStart = performance.now();
+  const db = await create({
     dimensions,
     quantization: 'F32',
     metric: 'cosine',
     embedder,
     storageDriver,
+    collectionId: COLLECTION_ID,
   });
+  const createElapsed = (performance.now() - createStart).toFixed(1);
 
   info('Embedder', embedderName);
   info('Dimensions', String(dimensions));
   info('Quantization', db.config.quantization);
   info('Metric', db.config.metric);
   info('Storage', fileDriver ? `FileDriver (${DEMO_DIR}/)` : 'MemoryDriver');
-  success('Instance created');
+  info('Collection ID', db.collectionId);
+  success(`Instance created${c.dim} (${createElapsed}ms)${c.reset}`);
 
   // ── Step: Restore or Embed ──────────────────────────────────────────────────
 
-  if (reuseBuffer) {
-    // Path C: Restore from existing file
-    nextStep('Restore from File Storage');
-
-    const restoreStart = performance.now();
-    db.deserialize(reuseBuffer);
-    const restoreElapsed = (performance.now() - restoreStart).toFixed(1);
+  if (reuseData) {
+    // Path C: Data auto-loaded by create()
+    nextStep('Data Restored from Storage');
 
     const s = db.stats();
     info('Restored entries', String(s.entryCount));
-    info('Restore time', `${restoreElapsed}ms`);
-    success(`Loaded from file${c.dim} (decompressed + deserialized)${c.reset}`);
+    success(`Loaded automatically${c.dim} (decompressed + deserialized during create)${c.reset}`);
   } else {
     // Path A/B: Embed fresh documents
     nextStep('Embed & Store Documents');
@@ -351,7 +351,7 @@ async function main() {
       const flushElapsed = (performance.now() - flushStart).toFixed(1);
 
       const memDriver = createMemoryDriver();
-      const dbTemp = create({ dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver });
+      const dbTemp = await create({ dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver });
       for (const doc of DOCUMENTS) {
         dbTemp.add(db.get(doc.id)!);
       }

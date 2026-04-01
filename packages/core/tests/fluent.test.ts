@@ -21,7 +21,7 @@ function createMockEmbedder(dimensions: number): Embedder {
   };
 }
 
-function createDb(opts?: { embedder?: boolean }): Trovec {
+async function createDb(opts?: { embedder?: boolean }): Promise<Trovec> {
   return create({
     dimensions: 3,
     embedder: opts?.embedder ? createMockEmbedder(3) : undefined,
@@ -29,8 +29,8 @@ function createDb(opts?: { embedder?: boolean }): Trovec {
 }
 
 describe('fluent API', () => {
-  it('create() returns object with all expected methods', () => {
-    const db = createDb();
+  it('create() returns object with all expected methods', async () => {
+    const db = await createDb();
 
     expect(typeof db.add).toBe('function');
     expect(typeof db.addMany).toBe('function');
@@ -48,8 +48,8 @@ describe('fluent API', () => {
     expect(typeof db.deserialize).toBe('function');
   });
 
-  it('retains TrovecInstance data properties', () => {
-    const db = createDb();
+  it('retains TrovecInstance data properties', async () => {
+    const db = await createDb();
     expect(db.config).toBeDefined();
     expect(db.config.dimensions).toBe(3);
     expect(db.entries).toBeInstanceOf(Map);
@@ -58,8 +58,8 @@ describe('fluent API', () => {
   });
 
   describe('collection methods', () => {
-    it('add and get', () => {
-      const db = createDb();
+    it('add and get', async () => {
+      const db = await createDb();
       db.add({ id: 'a', embedding: [1, 2, 3] });
 
       const entry = db.get('a');
@@ -67,8 +67,8 @@ describe('fluent API', () => {
       expect(entry!.id).toBe('a');
     });
 
-    it('addMany', () => {
-      const db = createDb();
+    it('addMany', async () => {
+      const db = await createDb();
       db.addMany([
         { id: 'a', embedding: [1, 2, 3] },
         { id: 'b', embedding: [4, 5, 6] },
@@ -76,8 +76,8 @@ describe('fluent API', () => {
       expect(db.stats().entryCount).toBe(2);
     });
 
-    it('delete', () => {
-      const db = createDb();
+    it('delete', async () => {
+      const db = await createDb();
       db.add({ id: 'a', embedding: [1, 2, 3] });
       expect(db.delete('a')).toBe(true);
       expect(db.get('a')).toBeUndefined();
@@ -85,8 +85,8 @@ describe('fluent API', () => {
   });
 
   describe('query', () => {
-    it('returns results', () => {
-      const db = createDb();
+    it('returns results', async () => {
+      const db = await createDb();
       db.add({ id: 'a', embedding: [1, 0, 0] });
       db.add({ id: 'b', embedding: [0, 1, 0] });
 
@@ -97,8 +97,8 @@ describe('fluent API', () => {
   });
 
   describe('stats and flush', () => {
-    it('stats returns correct count', () => {
-      const db = createDb();
+    it('stats returns correct count', async () => {
+      const db = await createDb();
       db.add({ id: 'x', embedding: [1, 2, 3] });
       const s = db.stats();
       expect(s.entryCount).toBe(1);
@@ -106,14 +106,14 @@ describe('fluent API', () => {
     });
 
     it('flush does not throw', async () => {
-      const db = createDb();
+      const db = await createDb();
       await expect(db.flush()).resolves.toBeUndefined();
     });
   });
 
   describe('embedder methods', () => {
     it('embed and embedMany', async () => {
-      const db = createDb({ embedder: true });
+      const db = await createDb({ embedder: true });
 
       const result = await db.embed('hello');
       expect(result.embedding).toHaveLength(3);
@@ -123,14 +123,14 @@ describe('fluent API', () => {
     });
 
     it('addWithText and get', async () => {
-      const db = createDb({ embedder: true });
+      const db = await createDb({ embedder: true });
 
       await db.addWithText({ id: 'doc1', text: 'hello world' });
       expect(db.get('doc1')).toBeDefined();
     });
 
     it('addManyWithText', async () => {
-      const db = createDb({ embedder: true });
+      const db = await createDb({ embedder: true });
 
       await db.addManyWithText([
         { id: 'a', text: 'hello' },
@@ -141,7 +141,7 @@ describe('fluent API', () => {
     });
 
     it('queryByText', async () => {
-      const db = createDb({ embedder: true });
+      const db = await createDb({ embedder: true });
 
       await db.addWithText({ id: 'doc1', text: 'hello world' });
       await db.addWithText({ id: 'doc2', text: 'foo bar baz' });
@@ -153,15 +153,15 @@ describe('fluent API', () => {
   });
 
   describe('serialization', () => {
-    it('serialize and deserialize roundtrip', () => {
-      const db = createDb();
+    it('serialize and deserialize roundtrip', async () => {
+      const db = await createDb();
       db.add({ id: 'a', embedding: [1, 2, 3], context: { foo: 'bar' } });
       db.add({ id: 'b', embedding: [4, 5, 6] });
 
       const buffer = db.serialize();
       expect(buffer).toBeInstanceOf(Buffer);
 
-      const db2 = createDb();
+      const db2 = await createDb();
       db2.deserialize(buffer);
 
       expect(db2.stats().entryCount).toBe(2);
@@ -170,8 +170,8 @@ describe('fluent API', () => {
   });
 
   describe('backward compatibility', () => {
-    it('Trovec objects work with functional API', () => {
-      const db = createDb();
+    it('Trovec objects work with functional API', async () => {
+      const db = await createDb();
 
       // Use functional API with the Trovec object
       add(db, { id: 'a', embedding: [1, 2, 3] });
@@ -185,7 +185,7 @@ describe('fluent API', () => {
     });
 
     it('Trovec objects work with functional embedder API', async () => {
-      const db = createDb({ embedder: true });
+      const db = await createDb({ embedder: true });
 
       await addWithText(db, { id: 'doc1', text: 'hello' });
       await addManyWithText(db, [{ id: 'doc2', text: 'world' }]);
@@ -194,12 +194,12 @@ describe('fluent API', () => {
       expect(results).toHaveLength(1);
     });
 
-    it('functional serialize/deserialize works with Trovec', () => {
-      const db = createDb();
+    it('functional serialize/deserialize works with Trovec', async () => {
+      const db = await createDb();
       add(db, { id: 'x', embedding: [1, 2, 3] });
 
       const buffer = serialize(db);
-      const db2 = createDb();
+      const db2 = await createDb();
       deserialize(buffer, db2);
 
       expect(stats(db2).entryCount).toBe(1);

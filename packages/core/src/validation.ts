@@ -1,6 +1,8 @@
 import type { EntryId, Entry, TrovecConfig, ResolvedTrovecConfig, StorageDriver } from './types.js';
 import { DimensionMismatchError, InvalidConfigError } from './errors.js';
 
+let instanceCounter = 0;
+
 const BIGINT_PREFIX = '__bigint__:';
 
 const nullDriver: StorageDriver = {
@@ -31,11 +33,14 @@ export function validateConfig(config: TrovecConfig): ResolvedTrovecConfig {
     throw new InvalidConfigError('Hamming metric requires BIT quantization');
   }
 
+  const collectionId = config.collectionId ?? `trovec_${++instanceCounter}`;
+
   return {
     dimensions: config.dimensions,
     quantization,
     metric,
     storageDriver,
+    collectionId,
     ...(config.embedder ? { embedder: config.embedder } : {}),
   };
 }

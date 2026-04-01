@@ -28,7 +28,7 @@ npm install @trovec/core
 import { create } from '@trovec/core';
 
 // 1. Create an instance
-const db = create({ dimensions: 3 });
+const db = await create({ dimensions: 3 });
 
 // 2. Add entries
 db.add({ id: 'cat', embedding: [0.9, 0.1, 0.0], context: { type: 'animal' } });
@@ -50,7 +50,7 @@ console.log(results);
 ```typescript
 import { create } from '@trovec/core';
 
-const db = create({
+const db = await create({
   dimensions: 128,
   quantization: 'INT8',    // compress vectors to int8
   metric: 'euclidean',
@@ -92,16 +92,23 @@ const driver = createFileDriver();
 //   compressionLevel: 1,       // default: 1 (fast), range: 0-11
 // });
 
-const db = create({ dimensions: 3, storageDriver: driver });
+const db = await create({
+  dimensions: 3,
+  storageDriver: driver,
+  collectionId: 'my-collection',
+});
 db.add({ id: 'a', embedding: [1, 2, 3] });
 
 // Persist to disk
 await db.flush();
 
-// Later: restore into a new instance
-const db2 = create({ dimensions: 3, storageDriver: driver });
-const buffer = await driver.read(db.collectionId);
-if (buffer) db2.deserialize(buffer);
+// Later: create() auto-loads existing data from storage
+const db2 = await create({
+  dimensions: 3,
+  storageDriver: driver,
+  collectionId: 'my-collection',
+});
+// db2 already has the previously flushed entries — no manual deserialize needed
 
 // Clean up all stored files when no longer needed
 await driver.destroy();
@@ -121,14 +128,13 @@ Stores data in a `Map` — fast, but data is lost when the process exits.
 import { create, createMemoryDriver } from '@trovec/core';
 
 const driver = createMemoryDriver();
-const db = create({ dimensions: 3, storageDriver: driver });
+const db = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
 
 db.add({ id: 'a', embedding: [1, 2, 3] });
 await db.flush();
 
-const db2 = create({ dimensions: 3, storageDriver: driver });
-const buffer = await driver.read(db.collectionId);
-if (buffer) db2.deserialize(buffer);
+// Data auto-loads on create()
+const db2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
 ```
 
 ### Text Embedding (with adapter)
@@ -139,7 +145,7 @@ Trovec provides an `Embedder` interface for text-to-vector conversion. Install a
 import { create } from '@trovec/core';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai'; // adapter package
 
-const db = create({
+const db = await create({
   dimensions: 1536,
   embedder: createOpenAIEmbedder({ apiKey: process.env.OPENAI_API_KEY }),
 });
@@ -170,7 +176,7 @@ const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `create` | `(config: TrovecConfig) => Trovec` | Create a new instance |
+| `create` | `(config: TrovecConfig) => Promise<Trovec>` | Create a new instance (auto-loads from storage) |
 | `db.flush()` | `() => Promise<void>` | Persist all data to storage |
 | `db.stats()` | `() => TrovecStats` | Get instance statistics |
 
@@ -220,7 +226,7 @@ Every fluent method is also available as a standalone function that takes the in
 ```typescript
 import { create, add, query, flush } from '@trovec/core';
 
-const db = create({ dimensions: 3 });
+const db = await create({ dimensions: 3 });
 add(db, { id: 'a', embedding: [1, 2, 3] });
 const results = query(db, { vector: [1, 2, 3], topK: 1 });
 await flush(db);
@@ -237,6 +243,7 @@ interface TrovecConfig {
   metric?: 'cosine' | 'euclidean' | 'dot' | 'hamming'; // default: 'cosine'
   storageDriver?: StorageDriver;       // default: no-op (in-memory only)
   embedder?: Embedder;                 // default: none (install an adapter)
+  collectionId?: string;               // default: auto-generated ('trovec_1', etc.)
 }
 ```
 
@@ -275,7 +282,7 @@ src/
 
 ### How It Works
 
-1. **`create()`** validates configuration, resolves the quantization codec and similarity function once, and returns a `Trovec` object — the raw instance enriched with bound methods that delegate to the functional implementations (zero logic duplication).
+1. **`create()`** validates configuration, resolves the quantization codec and similarity function once, checks the storage driver for existing data (auto-deserializes if found), and returns a `Trovec` object — the raw instance enriched with bound methods that delegate to the functional implementations (zero logic duplication).
 
 2. **`add()` / `addMany()`** validates embedding dimensions, quantizes the vector through the codec, and stores the quantized representation in a `Map<string, StoredEntry>`. `addMany` validates all entries before mutating any state (atomic semantics).
 
@@ -325,9 +332,9 @@ Publish as a separate package (e.g., `@trovec/embedder-mymodel`) to keep Trovec 
 
 When using a storage driver, all data is loaded into memory for querying:
 
-1. **On startup**, call `driver.read()` and `db.deserialize()` to load entries from storage into an in-memory `Map`.
+1. **On `create()`**, existing data is automatically read from the storage driver and deserialized into an in-memory `Map`. Use a stable `collectionId` to ensure the same data is loaded across restarts.
 2. **Queries** run entirely in-memory via brute-force scan — the storage driver is never touched during search.
-3. **On save**, call `db.flush()` to serialize and write all entries back to storage.
+3. **On `flush()`**, all entries are serialized and written back to storage.
 
 This design keeps queries fast (sub-millisecond for thousands of entries) but means the full dataset must fit in memory.
 

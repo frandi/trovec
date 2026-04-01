@@ -24,7 +24,7 @@ npm install @trovec/core @trovec/embedder-ollama
 import { create, addWithText, queryByText } from '@trovec/core';
 import { createOllamaEmbedder } from '@trovec/embedder-ollama';
 
-const db = create({
+const db = await create({
   dimensions: 768,
   embedder: createOllamaEmbedder(),
 });

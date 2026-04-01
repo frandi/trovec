@@ -5,17 +5,17 @@ import { createMemoryDriver } from '../src/storage/memory.js';
 import { InvalidConfigError } from '../src/errors.js';
 
 describe('create', () => {
-  it('creates instance with minimal config', () => {
-    const instance = create({ dimensions: 128 });
+  it('creates instance with minimal config', async () => {
+    const instance = await create({ dimensions: 128 });
     expect(instance.config.dimensions).toBe(128);
     expect(instance.config.quantization).toBe('F32');
     expect(instance.config.metric).toBe('cosine');
     expect(instance.entries.size).toBe(0);
   });
 
-  it('creates instance with full config', () => {
+  it('creates instance with full config', async () => {
     const driver = createMemoryDriver();
-    const instance = create({
+    const instance = await create({
       dimensions: 64,
       quantization: 'INT8',
       metric: 'euclidean',
@@ -26,14 +26,25 @@ describe('create', () => {
     expect(instance.config.metric).toBe('euclidean');
   });
 
-  it('throws on invalid config', () => {
-    expect(() => create({ dimensions: 0 })).toThrow(InvalidConfigError);
+  it('throws on invalid config', async () => {
+    await expect(create({ dimensions: 0 })).rejects.toThrow(InvalidConfigError);
+  });
+
+  it('auto-loads existing data from storage driver', async () => {
+    const driver = createMemoryDriver();
+    const instance1 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test' });
+    add(instance1, { id: 'a', embedding: [1, 2] });
+    await flush(instance1);
+
+    const instance2 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test' });
+    expect(instance2.entries.size).toBe(1);
+    expect(instance2.get('a')).toBeDefined();
   });
 });
 
 describe('stats', () => {
-  it('returns correct values for empty instance', () => {
-    const instance = create({ dimensions: 128, quantization: 'INT8', metric: 'euclidean' });
+  it('returns correct values for empty instance', async () => {
+    const instance = await create({ dimensions: 128, quantization: 'INT8', metric: 'euclidean' });
     const s = stats(instance);
     expect(s.entryCount).toBe(0);
     expect(s.dimensions).toBe(128);
@@ -42,8 +53,8 @@ describe('stats', () => {
     expect(s.indexStatus).toBe('brute-force');
   });
 
-  it('reflects entry count after adds', () => {
-    const instance = create({ dimensions: 2 });
+  it('reflects entry count after adds', async () => {
+    const instance = await create({ dimensions: 2 });
     add(instance, { id: 'a', embedding: [1, 2] });
     add(instance, { id: 'b', embedding: [3, 4] });
     expect(stats(instance).entryCount).toBe(2);
@@ -53,7 +64,7 @@ describe('stats', () => {
 describe('flush', () => {
   it('persists data to storage driver', async () => {
     const driver = createMemoryDriver();
-    const instance = create({ dimensions: 2, storageDriver: driver });
+    const instance = await create({ dimensions: 2, storageDriver: driver });
     add(instance, { id: 'a', embedding: [1, 2] });
 
     await flush(instance);

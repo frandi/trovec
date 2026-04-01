@@ -39,6 +39,7 @@ export interface TrovecConfig {
   metric?: MetricType;
   storageDriver?: StorageDriver;
   embedder?: Embedder;
+  collectionId?: string;
 }
 
 export interface TrovecStats {
@@ -96,6 +97,7 @@ export interface ResolvedTrovecConfig {
   metric: MetricType;
   storageDriver: StorageDriver;
   embedder?: Embedder;
+  collectionId: string;
 }
 
 export interface TrovecInstance {

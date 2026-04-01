@@ -2,17 +2,14 @@ import type { TrovecConfig, TrovecInstance, TrovecStats, Trovec } from './types.
 import { validateConfig } from './validation.js';
 import { getCodec } from './quantization/index.js';
 import { getMetric } from './similarity/index.js';
-import { serialize } from './serialization.js';
+import { serialize, deserialize } from './serialization.js';
 import { wrapInstance } from './fluent.js';
 
-let instanceCounter = 0;
-
-export function create(config: TrovecConfig): Trovec {
+export async function create(config: TrovecConfig): Promise<Trovec> {
   const resolved = validateConfig(config);
 
   const codec = getCodec(resolved.quantization);
   const similarityFn = getMetric(resolved.metric);
-  const collectionId = `trovec_${++instanceCounter}`;
 
   const instance: TrovecInstance = {
     config: Object.freeze(resolved),
@@ -20,8 +17,14 @@ export function create(config: TrovecConfig): Trovec {
     codec,
     similarityFn,
     dirty: false,
-    collectionId,
+    collectionId: resolved.collectionId,
   };
+
+  // Auto-load existing data from storage driver
+  const buffer = await resolved.storageDriver.read(resolved.collectionId);
+  if (buffer) {
+    deserialize(buffer, instance);
+  }
 
   return wrapInstance(instance);
 }
