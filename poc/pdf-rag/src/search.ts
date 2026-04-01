@@ -1,5 +1,4 @@
-import type { TrovecInstance } from '@trovec/core';
-import { queryByText } from '@trovec/core';
+import type { Trovec } from '@trovec/core';
 
 export interface SearchResult {
   id: string;
@@ -11,11 +10,11 @@ export interface SearchResult {
 }
 
 export async function searchDocuments(
-  db: TrovecInstance,
+  db: Trovec,
   query: string,
   topK: number = 5,
 ): Promise<SearchResult[]> {
-  const results = await queryByText(db, { text: 'search_query: ' + query, topK });
+  const results = await db.queryByText({ text: query, topK });
 
   return results.map((r) => ({
     id: String(r.id),

@@ -2,8 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import type { TrovecInstance } from '@trovec/core';
-import { stats } from '@trovec/core';
+import type { Trovec } from '@trovec/core';
 import { ingestPdf } from './ingest.js';
 import { searchDocuments } from './search.js';
 import { generateAnswer } from './answer.js';
@@ -12,7 +11,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const upload = multer({ dest: path.join(__dirname, '..', 'uploads') });
 
-export function createServer(db: TrovecInstance, openaiApiKey: string, port: number = 3737) {
+export function createServer(db: Trovec, openaiApiKey: string, port: number = 3737) {
   const app = express();
 
   app.use(express.json());
@@ -71,7 +70,7 @@ export function createServer(db: TrovecInstance, openaiApiKey: string, port: num
 
   app.get('/api/status', (_req, res) => {
     try {
-      const s = stats(db);
+      const s = db.stats();
       res.json({
         entryCount: s.entryCount,
         dimensions: s.dimensions,
@@ -83,9 +82,9 @@ export function createServer(db: TrovecInstance, openaiApiKey: string, port: num
     }
   });
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`PDF RAG POC server running at http://localhost:${port}`);
   });
 
-  return app;
+  return server;
 }

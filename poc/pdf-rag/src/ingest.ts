@@ -1,8 +1,6 @@
 import { LiteParse } from '@llamaindex/liteparse';
-import type { TrovecInstance } from '@trovec/core';
-import { addManyWithText } from '@trovec/core';
+import type { Trovec } from '@trovec/core';
 
-const DOCUMENT_PREFIX = 'search_document: ';
 const MIN_CHUNK_LENGTH = 100;
 const MAX_CHUNK_LENGTH = 500;
 
@@ -40,7 +38,7 @@ function chunkPage(pageText: string, pageNumber: number): Chunk[] {
 }
 
 export async function ingestPdf(
-  db: TrovecInstance,
+  db: Trovec,
   filePath: string,
   fileName: string,
 ): Promise<IngestResult> {
@@ -58,7 +56,7 @@ export async function ingestPdf(
 
   const entries = allChunks.map((chunk, i) => ({
     id: `${fileName}:p${chunk.pageNumber}:c${i}`,
-    text: DOCUMENT_PREFIX + chunk.text,
+    text: chunk.text,
     context: {
       pageNumber: chunk.pageNumber,
       sourceFile: fileName,
@@ -69,7 +67,7 @@ export async function ingestPdf(
   }));
 
   if (entries.length > 0) {
-    await addManyWithText(db, entries);
+    await db.addManyWithText(entries);
   }
 
   return {
