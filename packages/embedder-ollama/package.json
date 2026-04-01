@@ -1,6 +1,6 @@
 {
   "name": "@trovec/embedder-ollama",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Ollama embeddings adapter for Trovec",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -53,7 +53,7 @@
     "directory": "packages/embedder-ollama"
   },
   "peerDependencies": {
-    "@trovec/core": "^1.0.0"
+    "@trovec/core": "^2.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"
