@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,6 +7,7 @@ import type { Trovec } from '@trovec/core';
 import { ingestPdf } from './ingest.js';
 import { searchDocuments } from './search.js';
 import { generateAnswer } from './answer.js';
+import { getDocuments, addDocument, removeDocument } from './documents.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +27,7 @@ export function createServer(db: Trovec, openaiApiKey: string, port: number = 37
       }
 
       const result = await ingestPdf(db, req.file.path, req.file.originalname);
+      addDocument({ ...result, filePath: req.file.path });
       res.json(result);
     } catch (err: any) {
       console.error('Ingest error:', err);
@@ -65,6 +68,48 @@ export function createServer(db: Trovec, openaiApiKey: string, port: number = 37
     } catch (err: any) {
       console.error('Ask error:', err);
       res.status(500).json({ error: err.message ?? 'Answer generation failed' });
+    }
+  });
+
+  app.delete('/api/documents/:fileName', (_req, res) => {
+    try {
+      const fileName = _req.params.fileName;
+
+      // Delete all vectors belonging to this document
+      const keysToDelete: string[] = [];
+      for (const key of db.entries.keys()) {
+        if (key === fileName || key.startsWith(`${fileName}:`)) {
+          keysToDelete.push(key);
+        }
+      }
+      for (const key of keysToDelete) {
+        db.delete(key);
+      }
+
+      // Remove from document registry
+      const record = removeDocument(fileName);
+      if (!record && keysToDelete.length === 0) {
+        res.status(404).json({ error: 'Document not found' });
+        return;
+      }
+
+      // Delete the uploaded file
+      if (record?.filePath) {
+        fs.unlink(record.filePath, () => {});
+      }
+
+      res.json({ fileName, deletedChunks: keysToDelete.length });
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      res.status(500).json({ error: err.message ?? 'Delete failed' });
+    }
+  });
+
+  app.get('/api/documents', (_req, res) => {
+    try {
+      res.json(getDocuments());
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? 'Failed to load documents' });
     }
   });
 

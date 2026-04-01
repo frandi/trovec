@@ -71,9 +71,10 @@ Open http://localhost:3737 in your browser.
 
 ## Usage
 
-1. **Upload** a PDF using the upload area
-2. **Ask** a natural language question (e.g., "What are the main security concerns?")
-3. **Review** the synthesized answer with inline citation badges and expandable source references
+The UI is split into two panels:
+
+- **Left panel** — Upload PDFs and browse the document list. Each document can be deleted, which removes its vectors, metadata record, and uploaded file.
+- **Right panel** — Ask natural language questions and review cited answers with expandable source references.
 
 Ingested data is persisted in the `.trovec` directory, so previously uploaded documents are available across restarts.
 
@@ -91,6 +92,8 @@ Environment variables (can be set in `.env`):
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/ingest` | Upload and ingest a PDF (multipart form, field: `pdf`) |
+| `GET` | `/api/documents` | List all ingested documents |
+| `DELETE` | `/api/documents/:fileName` | Delete a document (vectors, record, and uploaded file) |
 | `GET` | `/api/search?q=...&topK=5` | Raw semantic search (returns ranked chunks) |
 | `POST` | `/api/ask` | Ask a question, get a cited answer (JSON body: `{ question, topK? }`) |
 | `GET` | `/api/status` | Vector store stats (entry count, dimensions, metric) |
@@ -100,11 +103,12 @@ Environment variables (can be set in `.env`):
 ```
 poc/pdf-rag/
 ├── .env                 # Environment variables (not committed)
-├── .trovec/             # Persisted vector store data (auto-created)
+├── .trovec/             # Persisted vector store data + document registry (auto-created)
 ├── package.json
 ├── tsconfig.json
 └── src/
     ├── main.ts          # Entry point — init Trovec, OpenAI embedder, start server
+    ├── documents.ts     # Document registry — JSON-backed record of ingested PDFs
     ├── ingest.ts        # PDF parsing + paragraph chunking + embedding pipeline
     ├── search.ts        # Semantic search via Trovec queryByText
     ├── answer.ts        # LLM answer generation with anti-hallucination prompts
