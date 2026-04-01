@@ -29,14 +29,13 @@ Based on your selections, the demo runs through the relevant steps:
 |------|-------------|------|
 | **Initialize** | Creates a Trovec instance with selected embedder, storage, and config | Always |
 | **Data Restored** | Data auto-loaded from storage during instance creation | Reusing persisted data |
-| **Embed & Store** | Embeds 64 sample documents and stores them with metadata | Fresh start |
-| **Persist to File** | Flushes to disk with Brotli compression, shows compression ratio | Persisted + fresh |
-| **Serialize to Memory** | Flushes to in-memory buffer, shows buffer size | In-memory + fresh |
+| **Embed & Store** | Embeds 64 sample documents and stores them with metadata (auto-flush persists automatically) | Fresh start |
 | **Similarity Search** | Runs 3 semantic queries and ranks results by cosine similarity | Always |
 | **Filtered Query** | Searches with a metadata filter (category = animals) | Always |
+| **Close Instance** | Flushes pending changes and cleans up; shows Brotli compression stats for file storage | Always |
 | **Final Stats** | Prints database statistics | Always |
 
-Persisted data is kept between runs in `.trovec/` so you can reuse it on the next start.
+Data is auto-flushed after mutations (debounced). `close()` at the end ensures any remaining changes are persisted and cleans up the `beforeExit` safety handler. Persisted data is kept between runs in `.trovec/` so you can reuse it on the next start.
 
 ## Embedders
 
@@ -114,9 +113,9 @@ For development and CI, local is fine. For evaluating real search quality locall
        "Cats are independent and curious animals that have been domesticated for thousands of years"
        → [0.0000, 0.0000, -0.1033, -0.0516, -0.0516, ... ] (64 dims)
     ...
-    ✓ Stored 64 entries
+    ✓ Stored 64 entries (auto-flush will persist automatically)
 
-   STEP 4  Similarity Search
+   STEP 3  Similarity Search
   ────────────────────────────────────────────────────────────────
 
     Query: "pets and animals" (Broad animal query)

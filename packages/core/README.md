@@ -98,9 +98,10 @@ const db = await create({
   collectionId: 'my-collection',
 });
 db.add({ id: 'a', embedding: [1, 2, 3] });
+// Data auto-persists after a short debounce (default: 500ms)
 
-// Persist to disk
-await db.flush();
+// When done, close() flushes any pending changes and cleans up
+await db.close();
 
 // Later: create() auto-loads existing data from storage
 const db2 = await create({
@@ -108,7 +109,7 @@ const db2 = await create({
   storageDriver: driver,
   collectionId: 'my-collection',
 });
-// db2 already has the previously flushed entries — no manual deserialize needed
+// db2 already has the previously saved entries — no manual load needed
 
 // Clean up all stored files when no longer needed
 await driver.destroy();
@@ -119,6 +120,8 @@ The file driver:
 - Uses atomic writes (temp file + rename) to prevent corruption
 - Applies Brotli compression by default (typically 60-80% size reduction)
 - Exposes `driver.directory` for inspecting the resolved path
+
+> **Auto-flush:** When a `storageDriver` is configured, data is automatically persisted after a short debounce (default: 500ms). You can disable this with `autoFlush: false` or customize the delay with `autoFlush: 2000` (ms). See [Configuration](#configuration) for details.
 
 #### Memory Storage (for testing and ephemeral data)
 
@@ -131,7 +134,8 @@ const driver = createMemoryDriver();
 const db = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
 
 db.add({ id: 'a', embedding: [1, 2, 3] });
-await db.flush();
+// Auto-flushes after debounce; or call close() for immediate flush + cleanup
+await db.close();
 
 // Data auto-loads on create()
 const db2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
@@ -177,7 +181,8 @@ const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `create` | `(config: TrovecConfig) => Promise<Trovec>` | Create a new instance (auto-loads from storage) |
-| `db.flush()` | `() => Promise<void>` | Persist all data to storage |
+| `db.flush()` | `() => Promise<void>` | Persist all data to storage immediately |
+| `db.close()` | `() => Promise<void>` | Flush pending changes and disable auto-flush |
 | `db.stats()` | `() => TrovecStats` | Get instance statistics |
 
 ### Collection Operations
@@ -224,12 +229,12 @@ All embedder methods throw `TrovecError` if no embedder is configured.
 Every fluent method is also available as a standalone function that takes the instance as the first argument. This is useful for tree-shaking or when you prefer a functional style:
 
 ```typescript
-import { create, add, query, flush } from '@trovec/core';
+import { create, add, query, close } from '@trovec/core';
 
 const db = await create({ dimensions: 3 });
 add(db, { id: 'a', embedding: [1, 2, 3] });
 const results = query(db, { vector: [1, 2, 3], topK: 1 });
-await flush(db);
+await close(db);
 ```
 
 `Trovec` objects are fully compatible with functional functions — you can mix and match both styles.
@@ -244,10 +249,13 @@ interface TrovecConfig {
   storageDriver?: StorageDriver;       // default: no-op (in-memory only)
   embedder?: Embedder;                 // default: none (install an adapter)
   collectionId?: string;               // default: auto-generated ('trovec_1', etc.)
+  autoFlush?: boolean | number;        // default: true when storageDriver is set
 }
 ```
 
-> **Note:** The `hamming` metric requires `BIT` quantization.
+> **Notes:**
+> - The `hamming` metric requires `BIT` quantization.
+> - `autoFlush: true` (default with a storage driver) enables debounced auto-persistence with a 500ms delay. Pass a `number` for a custom delay in ms, or `false` to disable (manual `flush()` only).
 
 ## Architecture
 
@@ -290,7 +298,7 @@ src/
 
 4. **`get()`** dequantizes the stored vector back to `number[]` before returning, so callers always receive float arrays regardless of the quantization mode.
 
-5. **`flush()`** serializes all entries into a binary buffer and writes it through the `StorageDriver` interface.
+5. **`flush()`** serializes all entries into a binary buffer and writes it through the `StorageDriver` interface. When auto-flush is enabled, this is called automatically after a debounce delay following mutations. **`close()`** flushes any pending changes, removes the `beforeExit` safety handler, and disables further auto-flush scheduling.
 
 ### Internal Precision
 
@@ -334,7 +342,9 @@ When using a storage driver, all data is loaded into memory for querying:
 
 1. **On `create()`**, existing data is automatically read from the storage driver and deserialized into an in-memory `Map`. Use a stable `collectionId` to ensure the same data is loaded across restarts.
 2. **Queries** run entirely in-memory via brute-force scan — the storage driver is never touched during search.
-3. **On `flush()`**, all entries are serialized and written back to storage.
+3. **Auto-flush** — after each mutation (`add`, `addMany`, `delete`), a debounced timer schedules a `flush()`. Multiple rapid mutations are batched into a single write. A `beforeExit` handler provides a safety net: if the process exits gracefully without an explicit `close()`, pending changes are still persisted.
+4. **On `close()`**, any pending changes are flushed immediately, the debounce timer is cleared, and the `beforeExit` handler is removed. Read operations (`get`, `query`, `stats`) continue to work after `close()`.
+5. **On `flush()`**, all entries are serialized and written back to storage. Manual `flush()` calls are still supported alongside auto-flush.
 
 This design keeps queries fast (sub-millisecond for thousands of entries) but means the full dataset must fit in memory.
 

@@ -1,7 +1,7 @@
 import type { TrovecInstance, Trovec } from './types.js';
 import { add, addMany, get, del } from './collection.js';
 import { query } from './query.js';
-import { flush, stats } from './core.js';
+import { flush, close, stats } from './core.js';
 import { embed, embedMany, addWithText, addManyWithText, queryByText } from './embedder.js';
 import { serialize, deserialize } from './serialization.js';
 
@@ -20,6 +20,7 @@ export function wrapInstance(instance: TrovecInstance): Trovec {
   // Core
   wrapped.stats = () => stats(wrapped);
   wrapped.flush = () => flush(wrapped);
+  wrapped.close = () => close(wrapped);
 
   // Embedder
   wrapped.embed = (input) => embed(wrapped, input);

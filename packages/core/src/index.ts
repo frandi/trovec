@@ -19,7 +19,7 @@ export type {
   TextQueryParams,
 } from './types.js';
 
-export { create, flush, stats } from './core.js';
+export { create, flush, close, stats } from './core.js';
 
 export { add, addMany, get, del as delete } from './collection.js';
 

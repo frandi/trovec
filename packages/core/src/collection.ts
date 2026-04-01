@@ -14,6 +14,7 @@ export function add(instance: TrovecInstance, entry: Entry): void {
   });
 
   instance.dirty = true;
+  instance._scheduleFlush?.();
 }
 
 export function addMany(instance: TrovecInstance, entries: Entry[]): void {
@@ -37,6 +38,7 @@ export function addMany(instance: TrovecInstance, entries: Entry[]): void {
 
   if (entries.length > 0) {
     instance.dirty = true;
+    instance._scheduleFlush?.();
   }
 }
 
@@ -46,6 +48,7 @@ export function del(instance: TrovecInstance, id: EntryId): boolean {
 
   if (existed) {
     instance.dirty = true;
+    instance._scheduleFlush?.();
   }
 
   return existed;

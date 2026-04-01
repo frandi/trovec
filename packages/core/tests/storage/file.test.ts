@@ -135,7 +135,7 @@ describe('FileStorageDriver', () => {
   describe('integration with trovec', () => {
     it('flush + create auto-loads state with file driver', async () => {
       const driver = createFileDriver({ directory: dir });
-      const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
+      const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       addMany(instance, [
         { id: 'x', embedding: [1, 2, 3], context: { tag: 'hello' } },
@@ -145,7 +145,7 @@ describe('FileStorageDriver', () => {
       await flush(instance);
 
       // Create new instance — data should auto-load
-      const instance2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
+      const instance2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       expect(instance2.entries.size).toBe(2);
       expect(get(instance2, 'x')!.embedding).toEqual([1, 2, 3]);
@@ -155,7 +155,7 @@ describe('FileStorageDriver', () => {
 
     it('query results match after persist + restore', async () => {
       const driver = createFileDriver({ directory: dir });
-      const instance = await create({ dimensions: 3, metric: 'cosine', storageDriver: driver, collectionId: 'test' });
+      const instance = await create({ dimensions: 3, metric: 'cosine', storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       add(instance, { id: 'cat', embedding: [1, 0, 0], context: { type: 'animal' } });
       add(instance, { id: 'dog', embedding: [0.9, 0.1, 0], context: { type: 'animal' } });
@@ -164,7 +164,7 @@ describe('FileStorageDriver', () => {
       const originalResults = query(instance, { vector: [1, 0, 0], topK: 2 });
       await flush(instance);
 
-      const instance2 = await create({ dimensions: 3, metric: 'cosine', storageDriver: driver, collectionId: 'test' });
+      const instance2 = await create({ dimensions: 3, metric: 'cosine', storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       const restoredResults = query(instance2, { vector: [1, 0, 0], topK: 2 });
       expect(restoredResults).toEqual(originalResults);
@@ -172,24 +172,24 @@ describe('FileStorageDriver', () => {
 
     it('works with INT8 quantization', async () => {
       const driver = createFileDriver({ directory: dir });
-      const instance = await create({ dimensions: 3, quantization: 'INT8', storageDriver: driver, collectionId: 'test' });
+      const instance = await create({ dimensions: 3, quantization: 'INT8', storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       add(instance, { id: 'a', embedding: [0.5, 0.3, 0.1] });
       await flush(instance);
 
-      const instance2 = await create({ dimensions: 3, quantization: 'INT8', storageDriver: driver, collectionId: 'test' });
+      const instance2 = await create({ dimensions: 3, quantization: 'INT8', storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       expect(stats(instance2).entryCount).toBe(1);
     });
 
     it('works with BIT quantization', async () => {
       const driver = createFileDriver({ directory: dir });
-      const instance = await create({ dimensions: 8, quantization: 'BIT', metric: 'hamming', storageDriver: driver, collectionId: 'test' });
+      const instance = await create({ dimensions: 8, quantization: 'BIT', metric: 'hamming', storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       add(instance, { id: 'a', embedding: [1, 1, 1, 1, -1, -1, -1, -1] });
       await flush(instance);
 
-      const instance2 = await create({ dimensions: 8, quantization: 'BIT', metric: 'hamming', storageDriver: driver, collectionId: 'test' });
+      const instance2 = await create({ dimensions: 8, quantization: 'BIT', metric: 'hamming', storageDriver: driver, collectionId: 'test', autoFlush: false });
 
       expect(stats(instance2).entryCount).toBe(1);
     });

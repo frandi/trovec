@@ -35,12 +35,28 @@ export function validateConfig(config: TrovecConfig): ResolvedTrovecConfig {
 
   const collectionId = config.collectionId ?? `trovec_${++instanceCounter}`;
 
+  const hasStorage = config.storageDriver != null;
+  let autoFlush: false | number;
+  if (config.autoFlush === false) {
+    autoFlush = false;
+  } else if (config.autoFlush === true || config.autoFlush === undefined) {
+    autoFlush = hasStorage ? 500 : false;
+  } else if (typeof config.autoFlush === 'number') {
+    if (config.autoFlush <= 0) {
+      throw new InvalidConfigError('autoFlush delay must be a positive number');
+    }
+    autoFlush = config.autoFlush;
+  } else {
+    throw new InvalidConfigError('autoFlush must be a boolean or a positive number');
+  }
+
   return {
     dimensions: config.dimensions,
     quantization,
     metric,
     storageDriver,
     collectionId,
+    autoFlush,
     ...(config.embedder ? { embedder: config.embedder } : {}),
   };
 }
