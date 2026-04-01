@@ -1,0 +1,48 @@
+{
+  "name": "vscode-trovec",
+  "displayName": "Trovec Viewer",
+  "description": "View and query .trovec vector database files",
+  "version": "0.1.0",
+  "publisher": "FrandiTech",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frandi/trovec.git",
+    "directory": "packages/vscode-trovec"
+  },
+  "icon": "media/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "trovec.viewer",
+        "displayName": "Trovec Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.trovec"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}
