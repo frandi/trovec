@@ -1,0 +1,72 @@
+{
+  "name": "@trovec/cli",
+  "version": "2.0.0",
+  "description": "Command-line interface for the Trovec vector database",
+  "type": "module",
+  "main": "./dist/esm/main.js",
+  "types": "./dist/esm/main.d.ts",
+  "bin": {
+    "trovec": "./bin/trovec.js"
+  },
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/main.d.ts",
+        "default": "./dist/esm/main.js"
+      },
+      "require": {
+        "types": "./dist/cjs/main.d.ts",
+        "default": "./dist/cjs/main.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "npm run build:esm && npm run build:cjs",
+    "build:esm": "tsc -p tsconfig.esm.json && node -e \"fs.writeFileSync('dist/esm/package.json','{\\\"type\\\":\\\"module\\\"}')\"",
+    "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"fs.writeFileSync('dist/cjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\"",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
+    "dev": "node --import tsx bin/trovec.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run clean && npm run build"
+  },
+  "engines": {
+    "node": ">=18.3.0"
+  },
+  "keywords": [
+    "trovec",
+    "vector",
+    "database",
+    "cli",
+    "embedding",
+    "similarity",
+    "search"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frandi/trovec.git",
+    "directory": "packages/cli"
+  },
+  "dependencies": {
+    "@trovec/core": "^2.0.0",
+    "@trovec/embedder-local": "^2.0.0"
+  },
+  "optionalDependencies": {
+    "@trovec/embedder-openai": "^2.0.0",
+    "@trovec/embedder-ollama": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.0.0"
+  }
+}
