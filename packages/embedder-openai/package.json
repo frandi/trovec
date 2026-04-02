@@ -1,6 +1,6 @@
 {
   "name": "@trovec/embedder-openai",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "OpenAI embeddings adapter for Trovec",
   "type": "module",
   "main": "./dist/cjs/index.js",
