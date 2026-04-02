@@ -29,12 +29,13 @@ export interface EmbedResult {
 }
 
 export interface Embedder {
+  readonly dimensions: number;
   embed(input: string): Promise<EmbedResult>;
   embedMany(input: string[]): Promise<EmbedResult[]>;
 }
 
 export interface TrovecConfig {
-  dimensions: number;
+  dimensions?: number;
   quantization?: QuantizationType;
   metric?: MetricType;
   storageDriver?: StorageDriver;

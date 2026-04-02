@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { create, flush, stats, add, addMany, get, delete as del, query, serialize, deserialize, addWithText, addManyWithText, queryByText } from '../src/index.js';
 import type { Embedder, Trovec } from '../src/types.js';
 
-function createMockEmbedder(dimensions: number): Embedder {
+function createMockEmbedder(dims: number): Embedder {
   return {
+    get dimensions() {
+      return dims;
+    },
     async embed(input: string) {
-      const embedding = new Array(dimensions).fill(0);
+      const embedding = new Array(dims).fill(0);
       for (let i = 0; i < input.length; i++) {
-        embedding[i % dimensions] += input.charCodeAt(i) / 1000;
+        embedding[i % dims] += input.charCodeAt(i) / 1000;
       }
       return { embedding };
     },

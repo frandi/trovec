@@ -11,12 +11,14 @@ describe('createLocalEmbedder', () => {
 
   it('defaults to 64 dimensions', async () => {
     const embedder = createLocalEmbedder({ warn: false });
+    expect(embedder.dimensions).toBe(64);
     const result = await embedder.embed('hello');
     expect(result.embedding).toHaveLength(64);
   });
 
   it('respects custom dimensions', async () => {
     const embedder = createLocalEmbedder({ dimensions: 128, warn: false });
+    expect(embedder.dimensions).toBe(128);
     const result = await embedder.embed('hello');
     expect(result.embedding).toHaveLength(128);
   });

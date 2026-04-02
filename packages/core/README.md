@@ -150,7 +150,6 @@ import { create } from '@trovec/core';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai'; // adapter package
 
 const db = await create({
-  dimensions: 1536,
   embedder: createOpenAIEmbedder({ apiKey: process.env.OPENAI_API_KEY }),
 });
 
@@ -162,10 +161,10 @@ await db.addWithText({ id: 'doc2', text: 'Dogs love to play fetch' });
 const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 ```
 
-> **No built-in embedder is included** — this keeps Trovec zero-dependency. Available adapters:
+> **No built-in embedder is included** — this keeps Trovec zero-dependency. Each adapter exposes a `dimensions` property, so Trovec can auto-configure itself. Available adapters:
 >
-> | Adapter | Dimensions | Notes |
-> |---------|-----------|-------|
+> | Adapter | Default dimensions | Notes |
+> |---------|-------------------|-------|
 > | [`@trovec/embedder-local`](../embedder-local/) | 64 | Trigram hash, zero deps, offline — for testing/demos |
 > | [`@trovec/embedder-ollama`](../embedder-ollama/) | 768 | Local Ollama server, no API key — good semantic quality |
 > | [`@trovec/embedder-openai`](../embedder-openai/) | 1536 | OpenAI API — best semantic quality |
@@ -243,7 +242,7 @@ await close(db);
 
 ```typescript
 interface TrovecConfig {
-  dimensions: number;                  // required: vector dimensionality
+  dimensions?: number;                 // auto-resolved from embedder, or required without one
   quantization?: 'F32' | 'INT8' | 'BIT';  // default: 'F32'
   metric?: 'cosine' | 'euclidean' | 'dot' | 'hamming'; // default: 'cosine'
   storageDriver?: StorageDriver;       // default: no-op (in-memory only)
@@ -254,6 +253,8 @@ interface TrovecConfig {
 ```
 
 > **Notes:**
+> - When an `embedder` is provided, `dimensions` is automatically resolved from `embedder.dimensions`. You can still set it explicitly, but it must match the embedder's dimensions or an error is thrown.
+> - When no `embedder` is provided (raw vector mode), `dimensions` is required.
 > - The `hamming` metric requires `BIT` quantization.
 > - `autoFlush: true` (default with a storage driver) enables debounced auto-persistence with a 500ms delay. Pass a `number` for a custom delay in ms, or `false` to disable (manual `flush()` only).
 
@@ -319,8 +320,13 @@ An embedder adapter is any object that implements the `Embedder` interface:
 ```typescript
 import type { Embedder, EmbedResult } from '@trovec/core';
 
+const DIMENSIONS = 1536; // must match your model's output dimensions
+
 export function createMyEmbedder(options: { apiKey: string }): Embedder {
   return {
+    get dimensions() {
+      return DIMENSIONS;
+    },
     async embed(input: string): Promise<EmbedResult> {
       // Call your embedding API/model here
       const embedding = await callEmbeddingAPI(input, options.apiKey);

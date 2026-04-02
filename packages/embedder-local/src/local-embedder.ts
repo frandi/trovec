@@ -102,6 +102,10 @@ export function createLocalEmbedder(options: LocalEmbedderOptions = {}): Embedde
   }
 
   return {
+    get dimensions() {
+      return dimensions;
+    },
+
     async embed(input: string): Promise<EmbedResult> {
       maybeWarn();
       return { embedding: textToEmbedding(input, dimensions) };

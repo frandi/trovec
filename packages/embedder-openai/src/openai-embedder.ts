@@ -4,7 +4,14 @@ export interface OpenAIEmbedderOptions {
   apiKey: string;
   model?: string;
   baseUrl?: string;
+  dimensions?: number;
 }
+
+const MODEL_DIMENSIONS: Record<string, number> = {
+  'text-embedding-3-small': 1536,
+  'text-embedding-3-large': 3072,
+  'text-embedding-ada-002': 1536,
+};
 
 interface OpenAIEmbeddingResponse {
   object: string;
@@ -39,6 +46,14 @@ export function createOpenAIEmbedder(options: OpenAIEmbedderOptions): Embedder {
   const model = options.model ?? DEFAULT_MODEL;
   const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
 
+  const resolvedDimensions = options.dimensions ?? MODEL_DIMENSIONS[model];
+  if (resolvedDimensions == null) {
+    throw new Error(
+      `Unknown model "${model}": dimensions could not be determined. ` +
+      'Pass an explicit dimensions option, e.g. createOpenAIEmbedder({ apiKey, model, dimensions: 1536 }).'
+    );
+  }
+
   async function callAPI(input: string | string[]): Promise<OpenAIEmbeddingResponse> {
     const response = await fetch(`${baseUrl}/embeddings`, {
       method: 'POST',
@@ -66,6 +81,10 @@ export function createOpenAIEmbedder(options: OpenAIEmbedderOptions): Embedder {
   }
 
   return {
+    get dimensions() {
+      return resolvedDimensions;
+    },
+
     async embed(input: string): Promise<EmbedResult> {
       const response = await callAPI(input);
       return { embedding: response.data[0].embedding };

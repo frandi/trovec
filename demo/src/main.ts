@@ -177,13 +177,12 @@ async function resolveEmbedder(
   choice: number,
   rl: ReturnType<typeof createInterface>,
   dimensions?: number,
-): Promise<{ embedder: Embedder; name: string; dimensions: number }> {
+): Promise<{ embedder: Embedder; name: string }> {
   if (choice === 1) {
     const apiKey = await resolveOpenAIKey(rl);
     return {
       embedder: createOpenAIEmbedder({ apiKey, model: 'text-embedding-3-small' }),
       name: 'OpenAI (text-embedding-3-small)',
-      dimensions: DIMENSIONS_OPENAI,
     };
   }
 
@@ -191,14 +190,12 @@ async function resolveEmbedder(
     return {
       embedder: createOllamaEmbedder({ model: 'nomic-embed-text' }),
       name: 'Ollama (nomic-embed-text)',
-      dimensions: DIMENSIONS_OLLAMA,
     };
   }
 
   return {
     embedder: createLocalEmbedder({ dimensions: dimensions ?? DIMENSIONS_LOCAL, warn: false }),
     name: 'Local (trigram hash)',
-    dimensions: dimensions ?? DIMENSIONS_LOCAL,
   };
 }
 
@@ -238,7 +235,6 @@ async function main() {
 
   let embedder: Embedder;
   let embedderName: string;
-  let dimensions: number;
 
   if (fileDriver && await fileDriver.exists(COLLECTION_ID)) {
     const existingBuffer = await fileDriver.read(COLLECTION_ID);
@@ -258,14 +254,12 @@ async function main() {
       const detectedResolved = await resolveEmbedder(detected.choice, rl, storedDims);
       embedder = detectedResolved.embedder;
       embedderName = detectedResolved.name;
-      dimensions = storedDims;
     } else {
       await fileDriver.delete(COLLECTION_ID);
       const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
       const resolved = await resolveEmbedder(embedderChoice, rl);
       embedder = resolved.embedder;
       embedderName = resolved.name;
-      dimensions = resolved.dimensions;
     }
   } else {
     // ── Prompt: Embedder (in-memory or persisted with no existing data) ────────
@@ -273,7 +267,6 @@ async function main() {
     const resolved = await resolveEmbedder(embedderChoice, rl);
     embedder = resolved.embedder;
     embedderName = resolved.name;
-    dimensions = resolved.dimensions;
   }
 
   rl.close();
@@ -290,7 +283,6 @@ async function main() {
   const storageDriver = fileDriver ?? createMemoryDriver();
   const createStart = performance.now();
   const db = await create({
-    dimensions,
     quantization: 'F32',
     metric: 'cosine',
     embedder,
@@ -300,7 +292,7 @@ async function main() {
   const createElapsed = (performance.now() - createStart).toFixed(1);
 
   info('Embedder', embedderName);
-  info('Dimensions', String(dimensions));
+  info('Dimensions', String(db.config.dimensions));
   info('Quantization', db.config.quantization);
   info('Metric', db.config.metric);
   info('Storage', fileDriver ? `FileDriver (${DEMO_DIR}/)` : 'MemoryDriver');
@@ -390,7 +382,7 @@ async function main() {
 
   if (fileDriver) {
     const memDriver = createMemoryDriver();
-    const dbTemp = await create({ dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver, autoFlush: false });
+    const dbTemp = await create({ dimensions: db.config.dimensions, quantization: 'F32', metric: 'cosine', storageDriver: memDriver, autoFlush: false });
     for (const doc of DOCUMENTS) {
       const entry = db.get(doc.id);
       if (entry) dbTemp.add(entry);
