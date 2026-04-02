@@ -3,7 +3,15 @@ import type { Embedder, EmbedResult } from '@trovec/core';
 export interface OllamaEmbedderOptions {
   model?: string;
   baseUrl?: string;
+  dimensions?: number;
 }
+
+const MODEL_DIMENSIONS: Record<string, number> = {
+  'nomic-embed-text': 768,
+  'mxbai-embed-large': 1024,
+  'all-minilm': 384,
+  'snowflake-arctic-embed': 1024,
+};
 
 interface OllamaEmbedResponse {
   model: string;
@@ -20,6 +28,14 @@ const DEFAULT_BASE_URL = 'http://localhost:11434';
 export function createOllamaEmbedder(options?: OllamaEmbedderOptions): Embedder {
   const model = options?.model ?? DEFAULT_MODEL;
   const baseUrl = (options?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');
+
+  const resolvedDimensions = options?.dimensions ?? MODEL_DIMENSIONS[model];
+  if (resolvedDimensions == null) {
+    throw new Error(
+      `Unknown model "${model}": dimensions could not be determined. ` +
+      'Pass an explicit dimensions option, e.g. createOllamaEmbedder({ model, dimensions: 768 }).'
+    );
+  }
 
   async function callAPI(input: string | string[]): Promise<OllamaEmbedResponse> {
     const response = await fetch(`${baseUrl}/api/embed`, {
@@ -47,6 +63,10 @@ export function createOllamaEmbedder(options?: OllamaEmbedderOptions): Embedder 
   }
 
   return {
+    get dimensions() {
+      return resolvedDimensions;
+    },
+
     async embed(input: string): Promise<EmbedResult> {
       const response = await callAPI(input);
       return { embedding: response.embeddings[0] };

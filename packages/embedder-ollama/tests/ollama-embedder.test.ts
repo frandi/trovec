@@ -38,6 +38,26 @@ describe('createOllamaEmbedder', () => {
     });
     expect(embedder).toBeDefined();
   });
+
+  it('exposes dimensions for default model', () => {
+    const embedder = createOllamaEmbedder();
+    expect(embedder.dimensions).toBe(768);
+  });
+
+  it('exposes dimensions for mxbai-embed-large', () => {
+    const embedder = createOllamaEmbedder({ model: 'mxbai-embed-large' });
+    expect(embedder.dimensions).toBe(1024);
+  });
+
+  it('uses explicit dimensions for unknown model', () => {
+    const embedder = createOllamaEmbedder({ model: 'custom-model', dimensions: 512 });
+    expect(embedder.dimensions).toBe(512);
+  });
+
+  it('throws for unknown model without explicit dimensions', () => {
+    expect(() => createOllamaEmbedder({ model: 'unknown-model' }))
+      .toThrow('Unknown model "unknown-model"');
+  });
 });
 
 describe('embed', () => {
@@ -107,7 +127,7 @@ describe('embed', () => {
       404,
     );
 
-    const embedder = createOllamaEmbedder({ model: 'bad-model' });
+    const embedder = createOllamaEmbedder({ model: 'bad-model', dimensions: 768 });
     await expect(embedder.embed('test')).rejects.toThrow('Ollama API error: model "bad-model" not found');
   });
 

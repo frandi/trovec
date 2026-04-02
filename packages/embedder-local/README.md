@@ -17,9 +17,9 @@ import { create, addWithText, queryByText } from '@trovec/core';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 
 const db = await create({
-  dimensions: 64,
   embedder: createLocalEmbedder(),
 });
+// dimensions are automatically resolved from the embedder (64 by default)
 
 await addWithText(db, { id: 'doc1', text: 'Cats are curious animals' });
 await addWithText(db, { id: 'doc2', text: 'Dogs love to play fetch' });

@@ -40,6 +40,26 @@ describe('createOpenAIEmbedder', () => {
     expect(typeof embedder.embed).toBe('function');
     expect(typeof embedder.embedMany).toBe('function');
   });
+
+  it('exposes dimensions for default model', () => {
+    const embedder = createOpenAIEmbedder({ apiKey: 'sk-test' });
+    expect(embedder.dimensions).toBe(1536);
+  });
+
+  it('exposes dimensions for text-embedding-3-large', () => {
+    const embedder = createOpenAIEmbedder({ apiKey: 'sk-test', model: 'text-embedding-3-large' });
+    expect(embedder.dimensions).toBe(3072);
+  });
+
+  it('uses explicit dimensions for unknown model', () => {
+    const embedder = createOpenAIEmbedder({ apiKey: 'sk-test', model: 'custom-model', dimensions: 2048 });
+    expect(embedder.dimensions).toBe(2048);
+  });
+
+  it('throws for unknown model without explicit dimensions', () => {
+    expect(() => createOpenAIEmbedder({ apiKey: 'sk-test', model: 'unknown-model' }))
+      .toThrow('Unknown model "unknown-model"');
+  });
 });
 
 describe('embed', () => {

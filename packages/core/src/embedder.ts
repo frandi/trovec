@@ -7,7 +7,7 @@ function getEmbedder(instance: TrovecInstance) {
   if (!instance.config.embedder) {
     throw new TrovecError(
       'No embedder configured. Pass an embedder in create() config, ' +
-      'e.g. create({ dimensions: 384, embedder: myEmbedder }). ' +
+      'e.g. create({ embedder: myEmbedder }). ' +
       'Install an adapter package such as @trovec/embedder-openai or @trovec/embedder-ollama.'
     );
   }

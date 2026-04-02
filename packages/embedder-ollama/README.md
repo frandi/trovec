@@ -25,9 +25,9 @@ import { create, addWithText, queryByText } from '@trovec/core';
 import { createOllamaEmbedder } from '@trovec/embedder-ollama';
 
 const db = await create({
-  dimensions: 768,
   embedder: createOllamaEmbedder(),
 });
+// dimensions are automatically resolved from the embedder (768 for the default model)
 
 await addWithText(db, { id: 'doc1', text: 'The cat sat on the mat' });
 await addWithText(db, { id: 'doc2', text: 'Dogs love to play fetch' });
@@ -39,12 +39,13 @@ const results = await queryByText(db, { text: 'animals sitting', topK: 5 });
 
 ```typescript
 createOllamaEmbedder({
-  model?: string;    // default: 'nomic-embed-text'
-  baseUrl?: string;  // default: 'http://localhost:11434'
+  model?: string;        // default: 'nomic-embed-text'
+  baseUrl?: string;      // default: 'http://localhost:11434'
+  dimensions?: number;   // auto-resolved for known models; required for custom models
 })
 ```
 
-All options are optional — the defaults work out of the box with a standard Ollama installation.
+All options are optional — the defaults work out of the box with a standard Ollama installation. The returned embedder exposes a read-only `dimensions` property that Trovec uses to auto-configure itself.
 
 ### Models
 
@@ -55,6 +56,15 @@ All options are optional — the defaults work out of the box with a standard Ol
 | `all-minilm` | 384 | ~45 MB | Lightweight, fast |
 
 Browse more embedding models at [ollama.com/search?c=embedding](https://ollama.com/search?c=embedding).
+
+For models not in the list above, pass `dimensions` explicitly:
+
+```typescript
+createOllamaEmbedder({
+  model: 'custom-model',
+  dimensions: 512,
+})
+```
 
 ### Remote Server
 

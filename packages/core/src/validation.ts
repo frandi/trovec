@@ -13,8 +13,22 @@ const nullDriver: StorageDriver = {
 };
 
 export function validateConfig(config: TrovecConfig): ResolvedTrovecConfig {
-  if (!Number.isInteger(config.dimensions) || config.dimensions <= 0) {
-    throw new InvalidConfigError('dimensions must be a positive integer');
+  // Resolve dimensions: explicit config takes priority, then embedder, then error
+  let dimensions: number;
+  if (config.dimensions != null) {
+    if (!Number.isInteger(config.dimensions) || config.dimensions <= 0) {
+      throw new InvalidConfigError('dimensions must be a positive integer');
+    }
+    if (config.embedder && config.dimensions !== config.embedder.dimensions) {
+      throw new InvalidConfigError(
+        `dimensions mismatch: config specifies ${config.dimensions} but embedder provides ${config.embedder.dimensions}`
+      );
+    }
+    dimensions = config.dimensions;
+  } else if (config.embedder) {
+    dimensions = config.embedder.dimensions;
+  } else {
+    throw new InvalidConfigError('dimensions is required when no embedder is provided');
   }
 
   const quantization = config.quantization ?? 'F32';
@@ -51,7 +65,7 @@ export function validateConfig(config: TrovecConfig): ResolvedTrovecConfig {
   }
 
   return {
-    dimensions: config.dimensions,
+    dimensions,
     quantization,
     metric,
     storageDriver,

@@ -31,6 +31,39 @@ describe('create', () => {
     await expect(create({ dimensions: 0 })).rejects.toThrow(InvalidConfigError);
   });
 
+  it('throws when no dimensions and no embedder', async () => {
+    await expect(create({})).rejects.toThrow('dimensions is required when no embedder is provided');
+  });
+
+  it('resolves dimensions from embedder', async () => {
+    const embedder = {
+      dimensions: 5,
+      async embed() { return { embedding: [1, 2, 3, 4, 5] }; },
+      async embedMany() { return []; },
+    };
+    const instance = await create({ embedder });
+    expect(instance.config.dimensions).toBe(5);
+  });
+
+  it('accepts matching explicit dimensions with embedder', async () => {
+    const embedder = {
+      dimensions: 5,
+      async embed() { return { embedding: [1, 2, 3, 4, 5] }; },
+      async embedMany() { return []; },
+    };
+    const instance = await create({ dimensions: 5, embedder });
+    expect(instance.config.dimensions).toBe(5);
+  });
+
+  it('throws on dimensions mismatch with embedder', async () => {
+    const embedder = {
+      dimensions: 5,
+      async embed() { return { embedding: [1, 2, 3, 4, 5] }; },
+      async embedMany() { return []; },
+    };
+    await expect(create({ dimensions: 10, embedder })).rejects.toThrow('dimensions mismatch');
+  });
+
   it('auto-loads existing data from storage driver', async () => {
     const driver = createMemoryDriver();
     const instance1 = await create({ dimensions: 2, storageDriver: driver, collectionId: 'test', autoFlush: false });

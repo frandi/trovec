@@ -6,13 +6,16 @@ import { embed, embedMany, addWithText, addManyWithText, queryByText } from '../
 import type { Embedder } from '../src/types.js';
 import { TrovecError } from '../src/errors.js';
 
-function createMockEmbedder(dimensions: number): Embedder {
+function createMockEmbedder(dims: number): Embedder {
   return {
+    get dimensions() {
+      return dims;
+    },
     async embed(input: string) {
       // Simple deterministic mock: hash-like embedding based on string
-      const embedding = new Array(dimensions).fill(0);
+      const embedding = new Array(dims).fill(0);
       for (let i = 0; i < input.length; i++) {
-        embedding[i % dimensions] += input.charCodeAt(i) / 1000;
+        embedding[i % dims] += input.charCodeAt(i) / 1000;
       }
       return { embedding };
     },
@@ -29,7 +32,7 @@ function createMockEmbedder(dimensions: number): Embedder {
 describe('embed', () => {
   it('delegates to the configured embedder', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     const result = await embed(instance, 'hello');
     expect(result.embedding).toHaveLength(3);
@@ -45,7 +48,7 @@ describe('embed', () => {
 describe('embedMany', () => {
   it('delegates to the configured embedder', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     const results = await embedMany(instance, ['hello', 'world']);
     expect(results).toHaveLength(2);
@@ -62,7 +65,7 @@ describe('embedMany', () => {
 describe('addWithText', () => {
   it('embeds text and adds entry', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'doc1', text: 'hello world' });
 
@@ -74,7 +77,7 @@ describe('addWithText', () => {
 
   it('preserves context', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'doc1', text: 'hello', context: { source: 'test' } });
 
@@ -91,7 +94,7 @@ describe('addWithText', () => {
 describe('addManyWithText', () => {
   it('embeds and batch inserts multiple entries', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     await addManyWithText(instance, [
       { id: 'doc1', text: 'hello world' },
@@ -106,7 +109,7 @@ describe('addManyWithText', () => {
   it('calls embedMany on the embedder', async () => {
     const mockEmbedder = createMockEmbedder(3);
     const spy = vi.spyOn(mockEmbedder, 'embedMany');
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     await addManyWithText(instance, [
       { id: 'a', text: 'one' },
@@ -121,7 +124,7 @@ describe('addManyWithText', () => {
 describe('queryByText', () => {
   it('embeds query text and returns results', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'doc1', text: 'hello world' });
     await addWithText(instance, { id: 'doc2', text: 'foo bar baz' });
@@ -133,7 +136,7 @@ describe('queryByText', () => {
 
   it('supports filter parameter', async () => {
     const mockEmbedder = createMockEmbedder(3);
-    const instance = await create({ dimensions: 3, embedder: mockEmbedder });
+    const instance = await create({ embedder: mockEmbedder });
 
     await addWithText(instance, { id: 'a', text: 'hello', context: { group: 'X' } });
     await addWithText(instance, { id: 'b', text: 'hello', context: { group: 'Y' } });
