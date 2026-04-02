@@ -6,7 +6,7 @@
     "demo"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w packages/core -w packages/embedder-local -w packages/embedder-openai -w packages/embedder-ollama -w packages/vscode-trovec -w packages/cli -w demo",
     "test": "vitest run",
     "test:watch": "vitest",
     "clean": "npm run clean --workspaces"
