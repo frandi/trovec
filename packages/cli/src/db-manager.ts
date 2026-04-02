@@ -1,20 +1,25 @@
 import { create, createFileDriver } from '@trovec/core';
 import type { Trovec, TrovecConfig, Embedder } from '@trovec/core';
 import { CliError } from './errors.js';
-import { mergeConfig, resolveDir, projectConfigExists } from './config.js';
-import type { CliFlags, MergedConfig } from './config.js';
+import { mergeConfig, resolveDir, projectConfigExists, inferConfigFromDir } from './config.js';
+import type { CliFlags, MergedConfig, ProjectConfig } from './config.js';
 
 export async function openDb(flags: CliFlags): Promise<Trovec> {
   const dir = resolveDir(flags);
 
+  let inferred: ProjectConfig | undefined;
   if (!projectConfigExists(dir)) {
-    throw new CliError(
-      `No trovec project found in ${dir}/`,
-      'Run "trovec init" to set up your project.',
-    );
+    const result = inferConfigFromDir(dir);
+    if (!result) {
+      throw new CliError(
+        `No trovec project found in ${dir}/`,
+        'Run "trovec init" to set up your project.',
+      );
+    }
+    inferred = result;
   }
 
-  const merged = mergeConfig(flags);
+  const merged = mergeConfig(flags, inferred);
 
   if (!merged.dimensions) {
     throw new CliError(

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { readHeaderFromDir } from './trovec-header.js';
 
 export interface ProjectConfig {
   dimensions?: number;
@@ -91,16 +92,26 @@ export interface CliFlags {
   [key: string]: unknown;
 }
 
-export function mergeConfig(flags: CliFlags): MergedConfig {
+export function inferConfigFromDir(dir: string): ProjectConfig | null {
+  const header = readHeaderFromDir(dir);
+  if (!header) return null;
+  return {
+    dimensions: header.dimensions,
+    quantization: header.quantization as ProjectConfig['quantization'],
+    metric: header.metric as ProjectConfig['metric'],
+  };
+}
+
+export function mergeConfig(flags: CliFlags, fallback?: ProjectConfig): MergedConfig {
   const dir = resolveDir(flags);
   const project = readProjectConfig(dir);
   const global = readGlobalConfig();
 
   return {
-    // Project settings
-    dimensions: flags.dimensions ?? project.dimensions,
-    quantization: (flags.quantization ?? project.quantization) as ProjectConfig['quantization'],
-    metric: (flags.metric ?? project.metric) as ProjectConfig['metric'],
+    // Project settings (flag > project config > inferred fallback)
+    dimensions: flags.dimensions ?? project.dimensions ?? fallback?.dimensions,
+    quantization: (flags.quantization ?? project.quantization ?? fallback?.quantization) as ProjectConfig['quantization'],
+    metric: (flags.metric ?? project.metric ?? fallback?.metric) as ProjectConfig['metric'],
     collectionId: flags.collection ?? project.collectionId,
     autoFlush: project.autoFlush,
 
