@@ -1,6 +1,10 @@
 # Trovec Viewer for VS Code
 
+[![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/FrandiTech.vscode-trovec)](https://marketplace.visualstudio.com/items?itemName=FrandiTech.vscode-trovec)
+
 A VS Code extension for viewing and querying `.trovec` vector database files directly in the editor.
+
+**Install from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=FrandiTech.vscode-trovec)**.
 
 ## Features
 

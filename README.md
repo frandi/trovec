@@ -11,6 +11,13 @@ A lightweight, zero-dependency vector database ecosystem for Node.js.
 | [`@trovec/embedder-openai`](packages/embedder-openai/) | OpenAI embeddings adapter | [![npm](https://img.shields.io/npm/v/@trovec/embedder-openai)](https://www.npmjs.com/package/@trovec/embedder-openai) |
 | [`@trovec/embedder-ollama`](packages/embedder-ollama/) | Ollama local embeddings adapter | [![npm](https://img.shields.io/npm/v/@trovec/embedder-ollama)](https://www.npmjs.com/package/@trovec/embedder-ollama) |
 
+### Tools
+
+| Package | Description | Install |
+|---------|-------------|---------|
+| [`@trovec/cli`](packages/cli/) | Command-line interface for trovec | [![npm](https://img.shields.io/npm/v/@trovec/cli)](https://www.npmjs.com/package/@trovec/cli) |
+| [Trovec Viewer for VS Code](packages/vscode-trovec/) | VS Code extension for viewing and querying `.trovec` files | [![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/FrandiTech.vscode-trovec)](https://marketplace.visualstudio.com/items?itemName=FrandiTech.vscode-trovec) |
+
 ## Quick Start
 
 ```bash
@@ -57,6 +64,8 @@ trovec/
     embedder-local/        Local embedder (testing/demos)
     embedder-openai/       OpenAI embeddings adapter
     embedder-ollama/       Ollama local embeddings adapter
+    cli/                   Command-line interface
+    vscode-trovec/         VS Code extension
     demo/                  Interactive CLI demo
 ```
 

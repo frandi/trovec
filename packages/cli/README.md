@@ -1,5 +1,7 @@
 # @trovec/cli
 
+[![npm](https://img.shields.io/npm/v/@trovec/cli)](https://www.npmjs.com/package/@trovec/cli)
+
 Command-line interface for the [Trovec](https://github.com/frandi/trovec) vector database. Perform all vector DB operations from the shell without writing code.
 
 Built on top of the same `@trovec/core` packages used in code, so the CLI mirrors the programmatic API directly.
