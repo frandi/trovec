@@ -85,6 +85,10 @@ export function createOpenAIEmbedder(options: OpenAIEmbedderOptions): Embedder {
       return resolvedDimensions;
     },
 
+    get model() {
+      return model;
+    },
+
     async embed(input: string): Promise<EmbedResult> {
       const response = await callAPI(input);
       return { embedding: response.data[0].embedding };

@@ -40,7 +40,7 @@ createOpenAIEmbedder({
 })
 ```
 
-The returned embedder exposes a read-only `dimensions` property that Trovec uses to auto-configure itself.
+The returned embedder exposes read-only `dimensions` and `model` properties. Trovec uses `dimensions` to auto-configure itself; `model` is available for logging and diagnostics.
 
 ### Models
 

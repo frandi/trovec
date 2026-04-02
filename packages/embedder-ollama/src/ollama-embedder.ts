@@ -67,6 +67,10 @@ export function createOllamaEmbedder(options?: OllamaEmbedderOptions): Embedder 
       return resolvedDimensions;
     },
 
+    get model() {
+      return model;
+    },
+
     async embed(input: string): Promise<EmbedResult> {
       const response = await callAPI(input);
       return { embedding: response.embeddings[0] };

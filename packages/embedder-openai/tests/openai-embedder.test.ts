@@ -46,6 +46,16 @@ describe('createOpenAIEmbedder', () => {
     expect(embedder.dimensions).toBe(1536);
   });
 
+  it('exposes default model name', () => {
+    const embedder = createOpenAIEmbedder({ apiKey: 'sk-test' });
+    expect(embedder.model).toBe('text-embedding-3-small');
+  });
+
+  it('exposes custom model name', () => {
+    const embedder = createOpenAIEmbedder({ apiKey: 'sk-test', model: 'text-embedding-3-large' });
+    expect(embedder.model).toBe('text-embedding-3-large');
+  });
+
   it('exposes dimensions for text-embedding-3-large', () => {
     const embedder = createOpenAIEmbedder({ apiKey: 'sk-test', model: 'text-embedding-3-large' });
     expect(embedder.dimensions).toBe(3072);

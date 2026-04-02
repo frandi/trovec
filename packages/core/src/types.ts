@@ -30,6 +30,7 @@ export interface EmbedResult {
 
 export interface Embedder {
   readonly dimensions: number;
+  readonly model?: string;
   embed(input: string): Promise<EmbedResult>;
   embedMany(input: string[]): Promise<EmbedResult[]>;
 }
