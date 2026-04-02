@@ -16,8 +16,6 @@ if (!OPENAI_API_KEY) {
 const embedder = createOpenAIEmbedder({ apiKey: OPENAI_API_KEY });
 
 const db = await create({
-  dimensions: 1536,
-  metric: 'cosine',
   embedder,
   storageDriver: createFileDriver(),
 });
