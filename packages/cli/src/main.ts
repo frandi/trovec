@@ -1,8 +1,10 @@
 import { parseArgs } from 'node:util';
+import { createRequire } from 'node:module';
 import { handleError, CliError } from './errors.js';
 import type { CliFlags } from './config.js';
 
-const VERSION = '2.0.0';
+const require = createRequire(import.meta.url);
+const { version: VERSION } = require('../package.json');
 
 const HELP = `
 Usage: trovec <command> [options]
