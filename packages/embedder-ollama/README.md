@@ -45,7 +45,7 @@ createOllamaEmbedder({
 })
 ```
 
-All options are optional — the defaults work out of the box with a standard Ollama installation. The returned embedder exposes a read-only `dimensions` property that Trovec uses to auto-configure itself.
+All options are optional — the defaults work out of the box with a standard Ollama installation. The returned embedder exposes read-only `dimensions` and `model` properties. Trovec uses `dimensions` to auto-configure itself; `model` is available for logging and diagnostics.
 
 ### Models
 

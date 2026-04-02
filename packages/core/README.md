@@ -327,6 +327,9 @@ export function createMyEmbedder(options: { apiKey: string }): Embedder {
     get dimensions() {
       return DIMENSIONS;
     },
+    get model() {
+      return 'my-model-name'; // optional — useful for logging/diagnostics
+    },
     async embed(input: string): Promise<EmbedResult> {
       // Call your embedding API/model here
       const embedding = await callEmbeddingAPI(input, options.apiKey);

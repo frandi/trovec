@@ -44,6 +44,16 @@ describe('createOllamaEmbedder', () => {
     expect(embedder.dimensions).toBe(768);
   });
 
+  it('exposes default model name', () => {
+    const embedder = createOllamaEmbedder();
+    expect(embedder.model).toBe('nomic-embed-text');
+  });
+
+  it('exposes custom model name', () => {
+    const embedder = createOllamaEmbedder({ model: 'mxbai-embed-large' });
+    expect(embedder.model).toBe('mxbai-embed-large');
+  });
+
   it('exposes dimensions for mxbai-embed-large', () => {
     const embedder = createOllamaEmbedder({ model: 'mxbai-embed-large' });
     expect(embedder.dimensions).toBe(1024);
