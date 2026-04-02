@@ -2,18 +2,8 @@ import { readFileSync, statSync } from 'node:fs';
 import { brotliDecompressSync } from 'node:zlib';
 import { formatOutput, detectFormat } from '../output.js';
 import { CliError } from '../errors.js';
+import { MAGIC, parseHeader } from '../trovec-header.js';
 import type { CliFlags } from '../config.js';
-
-const MAGIC = Buffer.from('VCR\x01');
-const QUANTIZATION_NAMES = ['F32', 'INT8', 'BIT'] as const;
-const METRIC_NAMES = ['cosine', 'euclidean', 'dot', 'hamming'] as const;
-
-interface TrovecHeader {
-  dimensions: number;
-  quantization: string;
-  metric: string;
-  entryCount: number;
-}
 
 export async function inspectCommand(positionals: string[], flags: CliFlags): Promise<void> {
   const filePath = positionals[0];
@@ -66,19 +56,6 @@ export async function inspectCommand(positionals: string[], flags: CliFlags): Pr
   process.stdout.write(formatOutput(info, format) + '\n');
 }
 
-function parseHeader(data: Buffer): TrovecHeader {
-  const dimensions = data.readUInt32LE(5);
-  const quantizationIdx = data[9];
-  const metricIdx = data[10];
-  const entryCount = data.readUInt32LE(11);
-
-  return {
-    dimensions,
-    quantization: QUANTIZATION_NAMES[quantizationIdx] ?? `unknown(${quantizationIdx})`,
-    metric: METRIC_NAMES[metricIdx] ?? `unknown(${metricIdx})`,
-    entryCount,
-  };
-}
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

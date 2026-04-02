@@ -46,6 +46,23 @@ trovec stats
 trovec repl
 ```
 
+## Working with Existing Databases
+
+The CLI can open `.trovec` databases created programmatically (e.g., via `@trovec/core`) without requiring `trovec init`. When no `config.json` is present, the CLI automatically reads the database configuration (dimensions, quantization, metric) from the binary file header.
+
+```bash
+# Inspect a database created by another app — no config.json needed
+cd my-app/
+trovec stats
+trovec find --limit 10
+
+# If the app uses a non-default collection, specify it
+trovec stats --collection my_collection
+trovec find --collection my_collection
+```
+
+Embedder-dependent commands (`search`, `add --text`, `embed`) still require an embedder to be configured via `trovec config set`, flags, or environment variables.
+
 ## Commands
 
 ### Project Setup
@@ -243,7 +260,7 @@ Environment variables are also supported:
 | `OPENAI_API_KEY` | OpenAI API key |
 | `OLLAMA_BASE_URL` | Ollama server URL |
 
-Resolution order: CLI flag > environment variable > project config > global config > default.
+Resolution order: CLI flag > environment variable > project config > inferred from binary header > global config > default.
 
 ### Interactive REPL
 
