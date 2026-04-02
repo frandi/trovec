@@ -1,5 +1,6 @@
 {
   "name": "vscode-trovec",
+  "private": true,
   "displayName": "Trovec Viewer",
   "description": "View and query .trovec vector database files",
   "version": "0.1.0",
