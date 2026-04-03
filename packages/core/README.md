@@ -174,6 +174,8 @@ await db.close();
 > - **`createFileDriver()`** — single-process apps, simpler setup, no lock overhead
 > - **`createConcurrentFileDriver()`** — multi-process apps, or when you need WAL for faster incremental flushes
 > - **`createConcurrentFileDriver({ wal: true })`** — frequent small mutations where rewriting the full file each time is too expensive
+>
+> **Concurrency limits:** The concurrent driver uses exclusive file locks with sleep-polling, which works well for **a handful of concurrent processes** (roughly 2-10). Throughput stays stable in this range, but tail latency grows with contention — at 32 processes, individual flushes can stall for seconds. If your workload involves many concurrent writers with latency requirements, consider a purpose-built database engine. See the [concurrency docs](../../docs/concurrency.md) for empirical benchmarks and a detailed analysis.
 
 #### Memory Storage (for testing and ephemeral data)
 
@@ -412,6 +414,24 @@ When using a storage driver, all data is loaded into memory for querying:
 5. **On `flush()`**, all entries are serialized and written back to storage. Manual `flush()` calls are still supported alongside auto-flush. When using the concurrent file driver with WAL enabled, `flush()` appends only the changed entries to the WAL file instead of rewriting the full collection.
 
 This design keeps queries fast (sub-millisecond for thousands of entries) but means the full dataset must fit in memory.
+
+### Performance at Scale
+
+Operations that touch the full dataset (loading, flushing, reading) scale linearly with collection size. Benchmarks with 128-dimension F32 vectors:
+
+| Entries | Init (`create()`) | Flush | Read | File size | RSS memory |
+|---|---|---|---|---|---|
+| 1K | 47ms | 32ms | 18ms | 0.9MB | 80MB |
+| 10K | 139ms | 110ms | 137ms | 9.3MB | 227MB |
+| 100K | 1.4s | 1.1s | 1.5s | 93MB | 888MB |
+| 500K | 10s | 7.2s | 13s | 464MB | 3.6GB |
+| 1M | 40s | 24s | 51s | 929MB | 7.2GB |
+
+> **Practical comfort zone: up to ~100K entries.** At this size, operations complete in 1-2 seconds, the file is ~93MB, and memory stays under 1GB. Higher dimensions multiply resource usage proportionally (e.g., 100K entries at 384d uses roughly 3x the memory).
+>
+> With WAL enabled, incremental writes (add + flush) stay under 1ms regardless of collection size — only full-dataset operations scale with entry count.
+>
+> Beyond 100K entries, init and read times grow into the tens of seconds and memory usage reaches multiple gigabytes. Trovec will still function correctly, but the experience degrades significantly. If your dataset is consistently larger than this, consider a database engine designed for large-scale vector storage.
 
 ### Future Improvement Considerations
 

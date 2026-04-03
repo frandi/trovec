@@ -64,9 +64,11 @@ Finds the practical ceiling for Trovec's file-based approach. Results can be use
 |------|-------------|-----------------|
 | 5.1 | Progressive dataset size (1K to 100K) | Flush or read > 10s |
 | 5.2 | WAL growth without checkpoint (100 to 10K entries) | Read > 5s |
-| 5.3 | N concurrent processes (2, 4, 8) | Throughput degradation |
+| 5.3 | N concurrent processes (2, 4, 8, 16, 32) | Throughput degradation, per-op flush timing, failure rate |
 | 5.4 | 3072d x 10K entries | Any operation > 30s |
 | 5.5 | INT8 vs F32 at 768d x 10K | Size and speed comparison |
+| 5.6 | Contention matrix (dims x ops x procs) | Vector size and sustained load impact on contention |
+| 5.7 | Data size impact (1K to 1M, 128d) | Init, WAL append, read, checkpoint, and memory at scale |
 
 ### Performance Benchmarks (`benchmarks/concurrent-file.bench.ts`)
 
@@ -88,6 +90,18 @@ Standalone script that outputs markdown tables for documentation. Measures:
 | File size | < 100MB | 100-500MB | > 500MB |
 | Memory | < 500MB | 500MB-1GB | > 1GB |
 | Lock acquisition | < 100ms | 100ms-1s | Timeout |
+
+## Results Output
+
+Tests 5.1, 5.2, and 5.3 write structured JSON reports to `tests/storage/__stress__/results/` (gitignored). These files contain per-tier metrics suitable for further analysis or documentation updates:
+
+| File | Contents |
+|------|----------|
+| `dataset-scaling.json` | Add/flush/read times and file sizes across dataset sizes |
+| `wal-scaling.json` | Read times and WAL file sizes as WAL grows without checkpoint |
+| `contention-scaling.json` | Per-operation flush timing (min/max/avg/p50/p95/p99), throughput, failure rate, and polling overhead estimates across process counts |
+| `contention-matrix.json` | Same metrics as contention-scaling but across a matrix of vector sizes (3d, 384d, 768d) and ops/worker (50, 200) |
+| `datasize-operations.json` | Per-tier benchmarks for init, WAL append, read, checkpoint, memory at collection sizes from 1K to 1M entries |
 
 ## Architecture
 

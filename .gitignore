@@ -7,3 +7,4 @@ coverage/
 uploads/
 .trovec/
 packages/cli/src/version.ts
+**/tests/**/__stress__/results/
