@@ -27,7 +27,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "npm run build:esm && npm run build:cjs",
+    "build": "npm run build:version && npm run build:esm && npm run build:cjs",
+    "build:version": "node -e \"const {version}=require('./package.json');fs.writeFileSync('src/version.ts','export const VERSION = \\\"'+version+'\\\";\\n')\"",
     "build:esm": "tsc -p tsconfig.esm.json && node -e \"fs.writeFileSync('dist/esm/package.json','{\\\"type\\\":\\\"module\\\"}')\"",
     "build:cjs": "tsc -p tsconfig.cjs.json && node -e \"fs.writeFileSync('dist/cjs/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\"",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",

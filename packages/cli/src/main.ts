@@ -1,8 +1,7 @@
 import { parseArgs } from 'node:util';
 import { handleError, CliError } from './errors.js';
 import type { CliFlags } from './config.js';
-
-const VERSION = '2.0.0';
+import { VERSION } from './version.js';
 
 const HELP = `
 Usage: trovec <command> [options]
