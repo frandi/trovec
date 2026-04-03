@@ -5,6 +5,21 @@ import type { FileStorageDriver, FileDriverOptions } from '../types.js';
 
 const DEFAULT_DIRECTORY = '.trovec';
 
+/**
+ * Create a file-based storage driver with optional Brotli compression.
+ *
+ * Collections are persisted as `.trovec` files in the specified directory.
+ * Writes are atomic (write to a temp file, then rename) to prevent corruption.
+ *
+ * @param options - Configuration for directory path, compression, and compression level.
+ * @returns A {@link FileStorageDriver} that persists data to the local filesystem.
+ *
+ * @example
+ * ```ts
+ * const driver = createFileDriver({ directory: './data', compression: true });
+ * const db = await create({ dimensions: 384, storageDriver: driver });
+ * ```
+ */
 export function createFileDriver(options: FileDriverOptions = {}): FileStorageDriver {
   const { directory = DEFAULT_DIRECTORY, compression = true, compressionLevel = 1 } = options;
   const resolvedDir = resolve(directory);

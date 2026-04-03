@@ -1,8 +1,23 @@
 import type { Embedder, EmbedResult } from '@trovec/core';
 
+/** Configuration options for the Ollama embedder. */
 export interface OllamaEmbedderOptions {
+  /**
+   * Model identifier to use for embeddings.
+   * @defaultValue `"nomic-embed-text"`
+   */
   model?: string;
+  /**
+   * Base URL for the Ollama API.
+   * @defaultValue `"http://localhost:11434"`
+   */
   baseUrl?: string;
+  /**
+   * Number of dimensions for the output embeddings.
+   * Auto-detected for known models (`nomic-embed-text`: 768,
+   * `mxbai-embed-large`: 1024, `all-minilm`: 384, `snowflake-arctic-embed`: 1024).
+   * Required for custom or unknown models.
+   */
   dimensions?: number;
 }
 
@@ -25,6 +40,21 @@ interface OllamaErrorResponse {
 const DEFAULT_MODEL = 'nomic-embed-text';
 const DEFAULT_BASE_URL = 'http://localhost:11434';
 
+/**
+ * Create an {@link Embedder} backed by a local Ollama instance.
+ *
+ * @param options - Model, base URL, and optional dimensions override. All fields are optional.
+ * @returns An {@link Embedder} that calls the Ollama `/api/embed` endpoint.
+ * @throws {Error} If the model's dimensions cannot be determined.
+ *
+ * @example
+ * ```ts
+ * import { createOllamaEmbedder } from '@trovec/embedder-ollama';
+ *
+ * const embedder = createOllamaEmbedder({ model: 'nomic-embed-text' });
+ * const db = await create({ embedder, storageDriver: createFileDriver() });
+ * ```
+ */
 export function createOllamaEmbedder(options?: OllamaEmbedderOptions): Embedder {
   const model = options?.model ?? DEFAULT_MODEL;
   const baseUrl = (options?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, '');

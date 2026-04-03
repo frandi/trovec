@@ -1,9 +1,25 @@
 import type { Embedder, EmbedResult } from '@trovec/core';
 
+/** Configuration options for the OpenAI embedder. */
 export interface OpenAIEmbedderOptions {
+  /** OpenAI API key. Required. */
   apiKey: string;
+  /**
+   * Model identifier to use for embeddings.
+   * @defaultValue `"text-embedding-3-small"`
+   */
   model?: string;
+  /**
+   * Base URL for the OpenAI API. Useful for proxies or compatible APIs.
+   * @defaultValue `"https://api.openai.com/v1"`
+   */
   baseUrl?: string;
+  /**
+   * Number of dimensions for the output embeddings.
+   * Auto-detected for known models (`text-embedding-3-small`: 1536,
+   * `text-embedding-3-large`: 3072, `text-embedding-ada-002`: 1536).
+   * Required for custom or unknown models.
+   */
   dimensions?: number;
 }
 
@@ -38,6 +54,21 @@ interface OpenAIErrorResponse {
 const DEFAULT_MODEL = 'text-embedding-3-small';
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
 
+/**
+ * Create an {@link Embedder} backed by the OpenAI Embeddings API.
+ *
+ * @param options - API key, model, and optional base URL / dimensions override.
+ * @returns An {@link Embedder} that calls the OpenAI `/v1/embeddings` endpoint.
+ * @throws {Error} If `apiKey` is missing or the model's dimensions cannot be determined.
+ *
+ * @example
+ * ```ts
+ * import { createOpenAIEmbedder } from '@trovec/embedder-openai';
+ *
+ * const embedder = createOpenAIEmbedder({ apiKey: process.env.OPENAI_API_KEY! });
+ * const db = await create({ embedder, storageDriver: createFileDriver() });
+ * ```
+ */
 export function createOpenAIEmbedder(options: OpenAIEmbedderOptions): Embedder {
   if (!options.apiKey) {
     throw new Error('OpenAI API key is required');

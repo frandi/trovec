@@ -5,6 +5,27 @@ import { getMetric } from './similarity/index.js';
 import { serialize, deserialize } from './serialization.js';
 import { wrapInstance } from './fluent.js';
 
+/**
+ * Create a new Trovec vector database instance.
+ *
+ * Validates the configuration, initializes quantization and similarity internals,
+ * loads any existing data from the storage driver, and sets up auto-flush if enabled.
+ *
+ * @param config - Configuration options for this instance.
+ * @returns A {@link Trovec} instance with a fluent API.
+ * @throws {InvalidConfigError} If the configuration is invalid (e.g. missing dimensions, incompatible metric/quantization).
+ *
+ * @example
+ * ```ts
+ * import { create, createFileDriver } from '@trovec/core';
+ *
+ * const db = await create({
+ *   dimensions: 384,
+ *   metric: 'cosine',
+ *   storageDriver: createFileDriver({ directory: './data' }),
+ * });
+ * ```
+ */
 export async function create(config: TrovecConfig): Promise<Trovec> {
   const resolved = validateConfig(config);
 
@@ -59,6 +80,14 @@ export async function create(config: TrovecConfig): Promise<Trovec> {
   return wrapInstance(instance);
 }
 
+/**
+ * Persist all pending changes to the storage driver immediately.
+ *
+ * Cancels any pending auto-flush timer and waits for any in-progress flush to complete
+ * before starting a new one. No-op if no storage driver is configured.
+ *
+ * @param instance - The Trovec instance to flush.
+ */
 export async function flush(instance: TrovecInstance): Promise<void> {
   if (!instance.config.storageDriver) return;
 
@@ -87,6 +116,15 @@ export async function flush(instance: TrovecInstance): Promise<void> {
   }
 }
 
+/**
+ * Gracefully shut down a Trovec instance.
+ *
+ * Flushes any unsaved changes, removes the `beforeExit` listener,
+ * and disables further auto-flush scheduling. Always call this when you are done
+ * with an instance to prevent resource leaks.
+ *
+ * @param instance - The Trovec instance to close.
+ */
 export async function close(instance: TrovecInstance): Promise<void> {
   // Clear the debounce timer
   if (instance._flushTimer != null) {
@@ -109,6 +147,12 @@ export async function close(instance: TrovecInstance): Promise<void> {
   instance._scheduleFlush = undefined;
 }
 
+/**
+ * Get runtime statistics about the collection.
+ *
+ * @param instance - The Trovec instance to inspect.
+ * @returns A snapshot of entry count, configured dimensions, quantization, metric, and index type.
+ */
 export function stats(instance: TrovecInstance): TrovecStats {
   return {
     entryCount: instance.entries.size,

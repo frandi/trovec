@@ -14,6 +14,7 @@
  */
 import type { Embedder, EmbedResult } from '@trovec/core';
 
+/** Configuration options for the local hash-based embedder. */
 export interface LocalEmbedderOptions {
   /**
    * Number of dimensions for output embeddings.
@@ -89,6 +90,23 @@ const WARNING =
   'It is intended for prototyping and testing only. ' +
   'For production, use a proper embedding model (e.g., @trovec/embedder-openai).';
 
+/**
+ * Create a zero-dependency local {@link Embedder} that uses character n-gram hashing.
+ *
+ * Generates deterministic embeddings entirely in-process — no API calls or model files.
+ * Intended for prototyping, testing, and demos only; does not capture true semantic meaning.
+ *
+ * @param options - Optional dimensions and warning configuration.
+ * @returns An {@link Embedder} that produces hash-based embeddings.
+ *
+ * @example
+ * ```ts
+ * import { createLocalEmbedder } from '@trovec/embedder-local';
+ *
+ * const embedder = createLocalEmbedder({ dimensions: 128 });
+ * const db = await create({ embedder });
+ * ```
+ */
 export function createLocalEmbedder(options: LocalEmbedderOptions = {}): Embedder {
   const dimensions = options.dimensions ?? 64;
   const shouldWarn = options.warn ?? true;
