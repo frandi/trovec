@@ -50,6 +50,15 @@ const results = db.query({ vector: [1, 0, 0], topK: 1 });
 await db.flush(); // persist to disk
 ```
 
+For multi-process environments, use the concurrent file driver with file locking and optional WAL:
+
+```typescript
+import { create, createConcurrentFileDriver } from '@trovec/core';
+
+const driver = createConcurrentFileDriver({ wal: true });
+const db = await create({ dimensions: 3, storageDriver: driver });
+```
+
 See each package's README for detailed documentation.
 
 ## Repository Structure

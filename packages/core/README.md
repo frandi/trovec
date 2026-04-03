@@ -12,6 +12,7 @@ A lightweight, zero-dependency vector database library for Node.js. Store, query
 - **Dual ESM/CJS** — works with both `import` and `require`
 - **TypeScript-first** — full type definitions included
 - **Mixed ID types** — supports both `string` and `bigint` entry IDs
+- **Multi-process safe** — concurrent file driver with advisory locks, WAL, and crash recovery
 - **Pluggable Embedder** — bring your own embedding adapter for text-to-vector conversion
 
 ## Quick Start
@@ -73,7 +74,7 @@ const results = db.query({
 
 ### Persistence
 
-Trovec provides two built-in storage drivers:
+Trovec provides three built-in storage drivers:
 
 #### File Storage (recommended for most use cases)
 
@@ -122,6 +123,57 @@ The file driver:
 - Exposes `driver.directory` for inspecting the resolved path
 
 > **Auto-flush:** When a `storageDriver` is configured, data is automatically persisted after a short debounce (default: 500ms). You can disable this with `autoFlush: false` or customize the delay with `autoFlush: 2000` (ms). See [Configuration](#configuration) for details.
+
+#### Concurrent File Storage (multi-process safe)
+
+Wraps file persistence with advisory file locks and an optional Write-Ahead Log (WAL). Use this when multiple Node.js processes may read/write the same collection simultaneously — for example, clustered servers or worker threads with separate event loops.
+
+```typescript
+import { create, createConcurrentFileDriver } from '@trovec/core';
+
+// Locking only (safe multi-process, full-rewrite on flush)
+const driver = createConcurrentFileDriver({ directory: './data' });
+
+// WAL enabled (incremental appends instead of full rewrites — faster flushes)
+const walDriver = createConcurrentFileDriver({
+  directory: './data',
+  wal: true,
+});
+
+const db = await create({
+  dimensions: 384,
+  storageDriver: walDriver,
+  collectionId: 'my-collection',
+});
+
+db.add({ id: 'a', embedding: new Array(384).fill(0.5) });
+await db.flush();
+await db.close();
+```
+
+**Options:**
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `directory` | `'.trovec'` | Storage directory |
+| `compression` | `true` | Brotli compression for base files |
+| `compressionLevel` | `1` | Brotli quality (0-11, 1 = fast) |
+| `wal` | `false` | Enable Write-Ahead Log for incremental persistence |
+| `staleLockTimeout` | `30000` | ms before a lock is considered stale (crashed process) |
+| `lockAcquireTimeout` | `10000` | ms to wait before giving up on lock acquisition |
+| `lockRetryInterval` | `200` | ms between lock retry attempts |
+
+**How it works:**
+
+- **Locking** — Each operation (read, write, WAL append) acquires an exclusive file lock (`<collectionId>.trovec.lock`). The lock includes a heartbeat so crashed processes' stale locks are automatically recovered after `staleLockTimeout`.
+- **Without WAL** — Every `flush()` rewrites the entire collection file (same as `createFileDriver`, but with locking).
+- **With WAL** — The first flush writes a full base file. Subsequent flushes append only the changed entries to a `.trovec.wal` file. On `create()`, the base file and WAL are merged. Call `driver.checkpoint(collectionId, serializedData)` to compact the WAL back into the base file.
+- **Crash safety** — WAL entries are individually checksummed (CRC32). If a process crashes mid-write, the next reader recovers all valid entries up to the point of interruption.
+
+> **When to use which driver:**
+> - **`createFileDriver()`** — single-process apps, simpler setup, no lock overhead
+> - **`createConcurrentFileDriver()`** — multi-process apps, or when you need WAL for faster incremental flushes
+> - **`createConcurrentFileDriver({ wal: true })`** — frequent small mutations where rewriting the full file each time is too expensive
 
 #### Memory Storage (for testing and ephemeral data)
 
@@ -287,6 +339,10 @@ src/
     index.ts                 StorageDriver re-export
     memory.ts                In-memory Map-backed driver
     file.ts                  File system driver with Brotli compression
+    concurrent-file.ts       Concurrent driver with file locking and optional WAL
+    lock.ts                  Advisory file locks with heartbeat and stale detection
+    wal.ts                   Write-Ahead Log (append, read, replay)
+    crc32.ts                 CRC32 checksums for WAL entry integrity
 ```
 
 ### How It Works
@@ -353,7 +409,7 @@ When using a storage driver, all data is loaded into memory for querying:
 2. **Queries** run entirely in-memory via brute-force scan — the storage driver is never touched during search.
 3. **Auto-flush** — after each mutation (`add`, `addMany`, `delete`), a debounced timer schedules a `flush()`. Multiple rapid mutations are batched into a single write. A `beforeExit` handler provides a safety net: if the process exits gracefully without an explicit `close()`, pending changes are still persisted.
 4. **On `close()`**, any pending changes are flushed immediately, the debounce timer is cleared, and the `beforeExit` handler is removed. Read operations (`get`, `query`, `stats`) continue to work after `close()`.
-5. **On `flush()`**, all entries are serialized and written back to storage. Manual `flush()` calls are still supported alongside auto-flush.
+5. **On `flush()`**, all entries are serialized and written back to storage. Manual `flush()` calls are still supported alongside auto-flush. When using the concurrent file driver with WAL enabled, `flush()` appends only the changed entries to the WAL file instead of rewriting the full collection.
 
 This design keeps queries fast (sub-millisecond for thousands of entries) but means the full dataset must fit in memory.
 
@@ -373,9 +429,13 @@ For larger datasets that exceed available memory, several strategies could be ex
 npm install          # install dev dependencies
 npm test             # run tests (vitest)
 npm run test:watch   # run tests in watch mode
+npm run test:stress  # run stress, multi-process, and scalability tests
+npm run test:bench   # run performance benchmarks
 npm run build        # compile to dist/esm + dist/cjs
 npm run clean        # remove dist/
 ```
+
+Stress tests are excluded from `npm test` since they take 1-2 minutes and spawn child processes. See [`tests/storage/__stress__/README.md`](tests/storage/__stress__/README.md) for details.
 
 ## License
 
