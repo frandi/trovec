@@ -41,7 +41,10 @@ async function tryCreateLockFile(lockPath: string): Promise<boolean> {
     await fd.close();
     return true;
   } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    const code = (err as NodeJS.ErrnoException).code;
+    // EEXIST: lock file already exists (expected)
+    // EPERM: on Windows, concurrent file creation can produce EPERM under contention
+    if (code === 'EEXIST' || code === 'EPERM') return false;
     throw err;
   }
 }

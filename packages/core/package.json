@@ -31,6 +31,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:stress": "vitest run --config vitest.stress.config.ts",
+    "test:bench": "tsx benchmarks/concurrent-file.bench.ts",
     "prepublishOnly": "npm run clean && npm run build && npm test"
   },
   "engines": {
