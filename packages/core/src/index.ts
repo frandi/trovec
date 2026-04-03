@@ -17,7 +17,15 @@ export type {
   ResolvedTrovecConfig,
   TextEntry,
   TextQueryParams,
+  ConcurrentFileDriverOptions,
+  ConcurrentFileStorageDriver,
+  WalOperation,
+  WalAwareDriver,
 } from './types.js';
+
+export { isWalAwareDriver } from './types.js';
+
+export { TrovecError, DimensionMismatchError, InvalidConfigError, LockTimeoutError, WalCorruptionError } from './errors.js';
 
 export { create, flush, close, stats } from './core.js';
 
@@ -30,5 +38,7 @@ export { embed, embedMany, addWithText, addManyWithText, queryByText } from './e
 export { createMemoryDriver } from './storage/memory.js';
 
 export { createFileDriver } from './storage/file.js';
+
+export { createConcurrentFileDriver } from './storage/concurrent-file.js';
 
 export { serialize, deserialize } from './serialization.js';

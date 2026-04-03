@@ -1,4 +1,5 @@
 import type { TrovecConfig, TrovecInstance, TrovecStats, Trovec } from './types.js';
+import { isWalAwareDriver } from './types.js';
 import { validateConfig } from './validation.js';
 import { getCodec } from './quantization/index.js';
 import { getMetric } from './similarity/index.js';
@@ -45,6 +46,11 @@ export async function create(config: TrovecConfig): Promise<Trovec> {
   const buffer = await resolved.storageDriver.read(resolved.collectionId);
   if (buffer) {
     deserialize(buffer, instance);
+  }
+
+  // Initialize WAL buffer if using a WAL-aware storage driver
+  if (isWalAwareDriver(resolved.storageDriver)) {
+    instance._walBuffer = [];
   }
 
   // Initialize auto-flush scheduler
@@ -103,8 +109,25 @@ export async function flush(instance: TrovecInstance): Promise<void> {
   }
 
   const doFlush = async () => {
-    const buffer = serialize(instance);
-    await instance.config.storageDriver.write(instance.collectionId, buffer);
+    const driver = instance.config.storageDriver;
+    if (isWalAwareDriver(driver) && instance._walBuffer && instance._walBuffer.length > 0) {
+      try {
+        await driver.appendWal(instance.collectionId, instance._walBuffer);
+        instance._walBuffer = [];
+      } catch (err: unknown) {
+        // If WAL config isn't ready (fresh collection), fall back to full write
+        if (err && (err as Error).name === 'WalConfigNotReady') {
+          const buffer = serialize(instance);
+          await driver.write(instance.collectionId, buffer);
+          instance._walBuffer = [];
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      const buffer = serialize(instance);
+      await driver.write(instance.collectionId, buffer);
+    }
     instance.dirty = false;
   };
 

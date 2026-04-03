@@ -1,6 +1,7 @@
 {
   "name": "trovec",
   "private": true,
+  "type": "module",
   "workspaces": [
     "packages/*",
     "demo"

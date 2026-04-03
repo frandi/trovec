@@ -24,6 +24,7 @@ export function add(instance: TrovecInstance, entry: Entry): void {
     context: entry.context,
   });
 
+  instance._walBuffer?.push({ type: 'put', id: entry.id, quantized, context: entry.context });
   instance.dirty = true;
   instance._scheduleFlush?.();
 }
@@ -56,6 +57,7 @@ export function addMany(instance: TrovecInstance, entries: Entry[]): void {
   // Insert all
   for (const { key, stored } of prepared) {
     instance.entries.set(key, stored);
+    instance._walBuffer?.push({ type: 'put', id: stored.id, quantized: stored.quantized, context: stored.context });
   }
 
   if (entries.length > 0) {
@@ -76,6 +78,7 @@ export function del(instance: TrovecInstance, id: EntryId): boolean {
   const existed = instance.entries.delete(key);
 
   if (existed) {
+    instance._walBuffer?.push({ type: 'delete', id });
     instance.dirty = true;
     instance._scheduleFlush?.();
   }
