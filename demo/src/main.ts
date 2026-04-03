@@ -2,12 +2,14 @@ import {
   create,
   createMemoryDriver,
   createFileDriver,
+  createConcurrentFileDriver,
 } from '@trovec/core';
 import type { Embedder } from '@trovec/core';
 import { stat, readFile, writeFile, mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
+import { execFile } from 'node:child_process';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai';
 import { createOllamaEmbedder } from '@trovec/embedder-ollama';
@@ -228,10 +230,22 @@ async function main() {
   const storageChoice = await askChoice(rl, 'Storage:', ['In-memory', 'Persisted (file)'], 0);
   const usePersisted = storageChoice === 1;
 
+  // ── Prompt: Storage mode (standard vs concurrent) ──────────────────────────
+
+  let useConcurrent = false;
+  if (usePersisted) {
+    const modeChoice = await askChoice(rl, 'Storage mode:', ['Standard', 'Concurrent (file locking + WAL)'], 0);
+    useConcurrent = modeChoice === 1;
+  }
+
   // ── Prompt: Reuse or start fresh (if persisted + data exists) ────────────────
 
   let reuseData = false;
-  let fileDriver = usePersisted ? createFileDriver({ directory: DEMO_DIR }) : null;
+  let fileDriver = usePersisted
+    ? (useConcurrent
+      ? createConcurrentFileDriver({ directory: DEMO_DIR, wal: true })
+      : createFileDriver({ directory: DEMO_DIR }))
+    : null;
 
   let embedder: Embedder;
   let embedderName: string;
@@ -282,7 +296,7 @@ async function main() {
 
   const storageDriver = fileDriver ?? createMemoryDriver();
   const createStart = performance.now();
-  const db = await create({
+  let db = await create({
     quantization: 'F32',
     metric: 'cosine',
     embedder,
@@ -295,7 +309,9 @@ async function main() {
   info('Dimensions', String(db.config.dimensions));
   info('Quantization', db.config.quantization);
   info('Metric', db.config.metric);
-  info('Storage', fileDriver ? `FileDriver (${DEMO_DIR}/)` : 'MemoryDriver');
+  info('Storage', fileDriver
+    ? (useConcurrent ? `ConcurrentFileDriver + WAL (${DEMO_DIR}/)` : `FileDriver (${DEMO_DIR}/)`)
+    : 'MemoryDriver');
   info('Collection ID', db.collectionId);
   success(`Instance created${c.dim} (${createElapsed}ms)${c.reset}`);
 
@@ -332,6 +348,92 @@ async function main() {
     console.log();
     const s = db.stats();
     success(`Stored ${c.bold}${s.entryCount}${c.reset}${c.green} entries ${c.dim}(auto-flush will persist automatically)${c.reset}`);
+  }
+
+  // ── Step: Concurrent Access Test (only in concurrent mode) ──────────────────
+
+  if (useConcurrent && !reuseData) {
+    nextStep('Concurrent Access Test');
+
+    const WORKER_COUNT = 3;
+    const ENTRIES_PER_WORKER = 5;
+    const workerScript = new URL('./concurrent-worker.ts', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
+
+    info('Workers', `${WORKER_COUNT} parallel processes, ${ENTRIES_PER_WORKER} entries each`);
+    info('Target', `Same collection file (${DEMO_DIR}/${COLLECTION_ID}.trovec)`);
+    console.log();
+
+    bullet('Flushing current data to disk before spawning workers...');
+    await db.flush();
+
+    const entriesBefore = db.stats().entryCount;
+
+    // Spawn workers in parallel
+    bullet(`Spawning ${WORKER_COUNT} worker processes...`);
+    console.log();
+
+    const workerPromises = Array.from({ length: WORKER_COUNT }, (_, i) => {
+      return new Promise<{ workerIndex: number; entryCount: number; elapsed: string }>((res, rej) => {
+        execFile('npx', [
+          'tsx', workerScript,
+          resolve(DEMO_DIR), COLLECTION_ID,
+          String(i + 1),
+          String(db.config.dimensions),
+          String(ENTRIES_PER_WORKER),
+        ], { timeout: 60_000, shell: true }, (err, stdoutData, stderrData) => {
+          if (err) {
+            rej(new Error(`Worker ${i + 1} failed: ${stderrData || err.message}`));
+            return;
+          }
+          try {
+            // Find the last line that looks like JSON (worker output)
+            const lines = stdoutData.trim().split('\n');
+            const jsonLine = lines.reverse().find(l => l.startsWith('{'));
+            res(JSON.parse(jsonLine!));
+          } catch {
+            rej(new Error(`Worker ${i + 1} invalid output: ${stdoutData}`));
+          }
+        });
+      });
+    });
+
+    const results = await Promise.all(workerPromises);
+
+    for (const r of results) {
+      success(`Worker ${c.cyan}#${r.workerIndex}${c.reset}${c.green} wrote ${c.bold}${r.entryCount}${c.reset}${c.green} entries ${c.dim}(${r.elapsed}ms)${c.reset}`);
+    }
+
+    // Reopen the collection to see merged data from all workers
+    console.log();
+    bullet('Reopening collection to verify merged data...');
+
+    // Re-create the instance to pick up WAL entries from all workers
+    await db.close();
+    const dbReopened = await create({
+      quantization: 'F32',
+      metric: 'cosine',
+      embedder,
+      storageDriver: fileDriver ?? createMemoryDriver(),
+      collectionId: COLLECTION_ID,
+    });
+
+    const entriesAfter = dbReopened.stats().entryCount;
+    const entriesAdded = entriesAfter - entriesBefore;
+    const expectedAdded = WORKER_COUNT * ENTRIES_PER_WORKER;
+
+    console.log();
+    info('Entries before', String(entriesBefore));
+    info('Entries after', String(entriesAfter));
+    info('Added by workers', `${entriesAdded} ${c.dim}(expected: ${expectedAdded})${c.reset}`);
+
+    if (entriesAdded === expectedAdded) {
+      success(`${c.bold}All ${expectedAdded} entries from ${WORKER_COUNT} processes persisted — no data lost!${c.reset}`);
+    } else {
+      warn(`Expected ${expectedAdded} new entries but found ${entriesAdded}. Some writes may have been lost.`);
+    }
+
+    // Replace db with reopened instance for the rest of the demo
+    db = dbReopened;
   }
 
   // ── Step: Similarity Search ─────────────────────────────────────────────────
@@ -379,6 +481,11 @@ async function main() {
   const closeElapsed = (performance.now() - closeStart).toFixed(1);
 
   success(`Instance closed ${c.dim}(final flush + cleanup in ${closeElapsed}ms)${c.reset}`);
+
+  if (useConcurrent) {
+    info('Mode', 'Concurrent (file locking + WAL)');
+    bullet(`WAL entries were appended incrementally during mutations`);
+  }
 
   if (fileDriver) {
     const memDriver = createMemoryDriver();
