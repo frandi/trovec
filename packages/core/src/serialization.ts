@@ -99,6 +99,16 @@ function readQuantizedData(buf: Buffer, offset: number, quantization: Quantizati
   }
 }
 
+/**
+ * Serialize the entire collection to a compact binary buffer.
+ *
+ * The binary format includes a 16-byte header (magic bytes, version, dimensions,
+ * quantization, metric, entry count) followed by each entry's ID, quantized vector
+ * data, and optional JSON context.
+ *
+ * @param instance - The Trovec instance to serialize.
+ * @returns A Buffer containing the serialized collection data.
+ */
 export function serialize(instance: TrovecInstance): Buffer {
   const { dimensions, quantization, metric } = instance.config;
   const entries = Array.from(instance.entries.values());
@@ -151,6 +161,16 @@ export function serialize(instance: TrovecInstance): Buffer {
   return buf;
 }
 
+/**
+ * Replace the current collection contents with data from a serialized buffer.
+ *
+ * Validates that the buffer's magic bytes, version, dimensions, and quantization
+ * type match the instance configuration before loading entries.
+ *
+ * @param buffer - A buffer produced by {@link serialize}.
+ * @param instance - The Trovec instance to populate.
+ * @throws {Error} If the buffer is malformed, or dimensions/quantization do not match.
+ */
 export function deserialize(buffer: Buffer, instance: TrovecInstance): void {
   const { dimensions, quantization } = instance.config;
 
