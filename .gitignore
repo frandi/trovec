@@ -6,3 +6,4 @@ coverage/
 .env
 uploads/
 .trovec/
+packages/cli/src/version.ts
