@@ -21,3 +21,23 @@ export class InvalidConfigError extends TrovecError {
     this.name = 'InvalidConfigError';
   }
 }
+
+/** Thrown when a file lock cannot be acquired within the configured timeout. */
+export class LockTimeoutError extends TrovecError {
+  constructor(lockPath: string, timeoutMs: number) {
+    super(`Failed to acquire lock "${lockPath}" within ${timeoutMs}ms`);
+    this.name = 'LockTimeoutError';
+  }
+}
+
+/** Thrown when a WAL file contains corrupted entries that cannot be replayed. */
+export class WalCorruptionError extends TrovecError {
+  /** Number of valid entries recovered before corruption was detected. */
+  readonly validEntries: number;
+
+  constructor(message: string, validEntries: number) {
+    super(message);
+    this.name = 'WalCorruptionError';
+    this.validEntries = validEntries;
+  }
+}

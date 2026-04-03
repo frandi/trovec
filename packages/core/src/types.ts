@@ -179,6 +179,71 @@ export interface FileStorageDriver extends StorageDriver {
   destroy(): Promise<void>;
 }
 
+/** Configuration options for the concurrent file-based storage driver. */
+export interface ConcurrentFileDriverOptions extends FileDriverOptions {
+  /**
+   * Time in milliseconds after which a lock is considered stale (process crashed).
+   * @defaultValue `30_000`
+   */
+  staleLockTimeout?: number;
+  /**
+   * Maximum time in milliseconds to wait when acquiring a lock.
+   * @defaultValue `10_000`
+   */
+  lockAcquireTimeout?: number;
+  /**
+   * Interval in milliseconds between lock acquisition retry attempts.
+   * @defaultValue `200`
+   */
+  lockRetryInterval?: number;
+  /**
+   * Enable Write-Ahead Log for delta-based persistence instead of full-collection rewrites.
+   * @defaultValue `false`
+   */
+  wal?: boolean;
+  /**
+   * Number of WAL entries before an automatic checkpoint compacts the WAL into the base file.
+   * Only applies when `wal` is `true`.
+   * @defaultValue `1000`
+   */
+  checkpointThreshold?: number;
+  /**
+   * Whether to automatically checkpoint the WAL when `close()` is called.
+   * Only applies when `wal` is `true`.
+   * @defaultValue `true`
+   */
+  checkpointOnClose?: boolean;
+}
+
+/** Concurrent file-based storage driver with file locking and optional WAL support. */
+export interface ConcurrentFileStorageDriver extends FileStorageDriver {
+  /** Compact the WAL into the base file. No-op if WAL is not enabled or is empty. */
+  checkpoint(collectionId: string): Promise<void>;
+}
+
+/** A single WAL operation representing an add or delete mutation. */
+export type WalOperation =
+  | { type: 'put'; id: EntryId; quantized: QuantizedVector; context?: Record<string, unknown> }
+  | { type: 'delete'; id: EntryId };
+
+/** Storage driver that supports WAL-based delta persistence. */
+export interface WalAwareDriver extends StorageDriver {
+  /** Discriminant flag for runtime feature detection. */
+  readonly walEnabled: true;
+  /** Append delta operations to the WAL file. */
+  appendWal(collectionId: string, ops: WalOperation[]): Promise<void>;
+  /** Compact WAL into a full snapshot. */
+  checkpoint(collectionId: string, data: Buffer): Promise<void>;
+}
+
+/**
+ * Type guard to check if a storage driver supports WAL operations.
+ * @param driver - The storage driver to check.
+ */
+export function isWalAwareDriver(driver: StorageDriver): driver is WalAwareDriver {
+  return 'walEnabled' in driver && (driver as WalAwareDriver).walEnabled === true;
+}
+
 // === Internal types ===
 
 export interface QuantizedVector {
@@ -253,6 +318,8 @@ export interface TrovecInstance {
   _flushing?: Promise<void>;
   /** @internal `beforeExit` listener reference, used for cleanup in {@link close}. */
   _beforeExitHandler?: () => void;
+  /** @internal Buffer for WAL operations when using a WAL-aware storage driver. */
+  _walBuffer?: WalOperation[];
 }
 
 // === Text types (used by embedder + fluent API) ===
