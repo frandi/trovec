@@ -21,11 +21,12 @@ export type {
   ConcurrentFileStorageDriver,
   WalOperation,
   WalAwareDriver,
+  EncryptionOptions,
 } from './types.js';
 
 export { isWalAwareDriver } from './types.js';
 
-export { TrovecError, DimensionMismatchError, InvalidConfigError, LockTimeoutError, WalCorruptionError } from './errors.js';
+export { TrovecError, DimensionMismatchError, InvalidConfigError, LockTimeoutError, WalCorruptionError, EncryptionError } from './errors.js';
 
 export { create, flush, close, stats } from './core.js';
 
@@ -40,5 +41,7 @@ export { createMemoryDriver } from './storage/memory.js';
 export { createFileDriver } from './storage/file.js';
 
 export { createConcurrentFileDriver } from './storage/concurrent-file.js';
+
+export { withEncryption } from './storage/encryption.js';
 
 export { serialize, deserialize } from './serialization.js';

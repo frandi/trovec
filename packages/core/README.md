@@ -13,6 +13,7 @@ A lightweight, zero-dependency vector database library for Node.js. Store, query
 - **TypeScript-first** — full type definitions included
 - **Mixed ID types** — supports both `string` and `bigint` entry IDs
 - **Multi-process safe** — concurrent file driver with advisory locks, WAL, and crash recovery
+- **Encryption at rest** — opt-in AES-256-GCM encryption for collection files and WAL entries
 - **Pluggable Embedder** — bring your own embedding adapter for text-to-vector conversion
 
 ## Quick Start
@@ -176,6 +177,34 @@ await db.close();
 > - **`createConcurrentFileDriver({ wal: true })`** — frequent small mutations where rewriting the full file each time is too expensive
 >
 > **Concurrency limits:** The concurrent driver uses exclusive file locks with sleep-polling, which works well for **a handful of concurrent processes** (roughly 2-10). Throughput stays stable in this range, but tail latency grows with contention — at 32 processes, individual flushes can stall for seconds. If your workload involves many concurrent writers with latency requirements, consider a purpose-built database engine. See the [concurrency docs](../../docs/concurrency.md) for empirical benchmarks and a detailed analysis.
+
+#### Encryption at Rest
+
+Trovec supports opt-in AES-256-GCM encryption for data at rest. This protects embedding vectors, entry IDs, and context metadata from unauthorized access — including protection against [vector inversion attacks](https://arxiv.org/abs/2310.06816) that can recover approximate original content from raw embeddings.
+
+```typescript
+import { create, createFileDriver, withEncryption } from '@trovec/core';
+import { randomBytes } from 'node:crypto';
+
+// Wrap any driver with encryption (raw 32-byte key)
+const key = randomBytes(32);
+const driver = withEncryption(createFileDriver(), { key });
+
+const db = await create({ dimensions: 384, storageDriver: driver });
+```
+
+For concurrent access with WAL + encryption, pass the `encryption` option directly to the concurrent driver:
+
+```typescript
+import { createConcurrentFileDriver } from '@trovec/core';
+
+const driver = createConcurrentFileDriver({
+  wal: true,
+  encryption: { key },  // or { password: 'my-passphrase' }
+});
+```
+
+Password-based key derivation (PBKDF2) is also supported for convenience. See the [encryption docs](../../docs/encryption.md) for the full threat model, encrypted format specification, and performance analysis.
 
 #### Memory Storage (for testing and ephemeral data)
 
@@ -375,6 +404,7 @@ src/
     lock.ts                  Advisory file locks with heartbeat and stale detection
     wal.ts                   Write-Ahead Log (append, read, replay)
     crc32.ts                 CRC32 checksums for WAL entry integrity
+    encryption.ts            AES-256-GCM encryption primitives and withEncryption() wrapper
 ```
 
 ### How It Works
@@ -461,6 +491,8 @@ Operations that touch the full dataset (loading, flushing, reading) scale linear
 > **Practical comfort zone: up to ~100K entries.** At this size, operations complete in 1-2 seconds, the file is ~93MB, and memory stays under 1GB. Higher dimensions multiply resource usage proportionally (e.g., 100K entries at 384d uses roughly 3x the memory).
 >
 > With WAL enabled, incremental writes (add + flush) stay under 1ms regardless of collection size — only full-dataset operations scale with entry count.
+>
+> **With encryption enabled**, flush adds ~30% and read adds ~9% at 100K entries. File sizes are identical (46-byte header is negligible). WAL append overhead is ~13%. See the [encryption docs](../../docs/encryption.md) for detailed benchmarks.
 >
 > Beyond 100K entries, init and read times grow into the tens of seconds and memory usage reaches multiple gigabytes. Trovec will still function correctly, but the experience degrades significantly. If your dataset is consistently larger than this, consider a database engine designed for large-scale vector storage.
 

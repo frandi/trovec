@@ -1,7 +1,7 @@
 /**
  * Concurrent worker — spawned as a child process by the demo.
  *
- * Usage: tsx demo/src/concurrent-worker.ts <directory> <collectionId> <workerIndex> <dimensions> <entryCount>
+ * Usage: tsx demo/src/concurrent-worker.ts <directory> <collectionId> <workerIndex> <dimensions> <entryCount> [encryptionKeyHex]
  *
  * Each worker opens the same collection via ConcurrentFileDriver (WAL mode),
  * adds a batch of entries with a worker-specific ID prefix, flushes, and closes.
@@ -10,13 +10,17 @@
 import { create, createConcurrentFileDriver } from '@trovec/core';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 
-const [directory, collectionId, workerIndexStr, dimensionsStr, entryCountStr] = process.argv.slice(2);
+const [directory, collectionId, workerIndexStr, dimensionsStr, entryCountStr, encryptionKeyHex] = process.argv.slice(2);
 const workerIndex = parseInt(workerIndexStr, 10);
 const dimensions = parseInt(dimensionsStr, 10);
 const entryCount = parseInt(entryCountStr, 10);
 
 async function run() {
-  const driver = createConcurrentFileDriver({ directory, wal: true });
+  const driver = createConcurrentFileDriver({
+    directory,
+    wal: true,
+    ...(encryptionKeyHex ? { encryption: { key: Buffer.from(encryptionKeyHex, 'hex') } } : {}),
+  });
   const embedder = createLocalEmbedder({ dimensions, warn: false });
 
   const db = await create({

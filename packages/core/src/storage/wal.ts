@@ -158,11 +158,20 @@ function createWalHeader(config: WalConfig): Buffer {
   return buf;
 }
 
+/** Optional transform applied to each WAL entry and header for encryption. */
+export interface WalTransforms {
+  /** Transform applied to each serialized entry/header before writing. */
+  encrypt: (buf: Buffer) => Buffer;
+  /** Transform applied to each encrypted entry/header after reading. */
+  decrypt: (buf: Buffer) => Buffer;
+}
+
 export async function appendWalEntries(
   walPath: string,
   ops: WalOperation[],
   sequenceStart: number,
   config: WalConfig,
+  transforms?: WalTransforms,
 ): Promise<number> {
   if (ops.length === 0) return sequenceStart;
 
@@ -178,13 +187,29 @@ export async function appendWalEntries(
   try {
     if (needsHeader) {
       const header = createWalHeader(config);
-      await fd.writeFile(header);
+      if (transforms) {
+        const encrypted = transforms.encrypt(header);
+        const framed = Buffer.alloc(4 + encrypted.length);
+        framed.writeUInt32LE(encrypted.length, 0);
+        encrypted.copy(framed, 4);
+        await fd.writeFile(framed);
+      } else {
+        await fd.writeFile(header);
+      }
     }
 
     let seq = sequenceStart;
     for (const op of ops) {
       const entry = serializeWalEntry(op, seq, config);
-      await fd.writeFile(entry);
+      if (transforms) {
+        const encrypted = transforms.encrypt(entry);
+        const framed = Buffer.alloc(4 + encrypted.length);
+        framed.writeUInt32LE(encrypted.length, 0);
+        encrypted.copy(framed, 4);
+        await fd.writeFile(framed);
+      } else {
+        await fd.writeFile(entry);
+      }
       seq++;
     }
     return seq;
@@ -199,7 +224,7 @@ export interface ReadWalResult {
   truncated: boolean;
 }
 
-export async function readWalEntries(walPath: string, config: WalConfig): Promise<ReadWalResult> {
+export async function readWalEntries(walPath: string, config: WalConfig, transforms?: WalTransforms): Promise<ReadWalResult> {
   let raw: Buffer;
   try {
     raw = await readFile(walPath);
@@ -210,6 +235,14 @@ export async function readWalEntries(walPath: string, config: WalConfig): Promis
     throw err;
   }
 
+  if (transforms) {
+    return readEncryptedWal(raw, config, transforms);
+  }
+
+  return readPlaintextWal(raw, config);
+}
+
+function readPlaintextWal(raw: Buffer, config: WalConfig): ReadWalResult {
   if (raw.length < WAL_HEADER_SIZE) {
     return { entries: [], nextSequence: 0, truncated: true };
   }
@@ -285,6 +318,124 @@ export async function readWalEntries(walPath: string, config: WalConfig): Promis
 
   const nextSequence = entries.length > 0 ? entries[entries.length - 1].sequence + 1 : 0;
   return { entries, nextSequence, truncated };
+}
+
+function readEncryptedWal(raw: Buffer, config: WalConfig, transforms: WalTransforms): ReadWalResult {
+  // Encrypted WAL format:
+  //   [4 bytes] encrypted header length
+  //   [N bytes] encrypted(WAL header)
+  //   Per entry:
+  //     [4 bytes] encrypted entry length
+  //     [N bytes] encrypted(original entry)
+
+  if (raw.length < 4) {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+
+  let offset = 0;
+
+  // Read and decrypt header
+  const headerLen = raw.readUInt32LE(offset); offset += 4;
+  if (offset + headerLen > raw.length) {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+
+  let header: Buffer;
+  try {
+    header = transforms.decrypt(raw.subarray(offset, offset + headerLen));
+  } catch {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+  offset += headerLen;
+
+  // Validate decrypted header
+  if (header.length < WAL_HEADER_SIZE) {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+  const magic = header.subarray(0, 4);
+  if (!magic.equals(WAL_MAGIC)) {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+  const version = header.readUInt8(4);
+  if (version !== WAL_VERSION) {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+  const fileDims = header.readUInt32LE(5);
+  const fileQuant = QUANT_REVERSE[header.readUInt8(9)];
+  if (fileDims !== config.dimensions || fileQuant !== config.quantization) {
+    return { entries: [], nextSequence: 0, truncated: true };
+  }
+
+  // Read encrypted entries
+  const entries: WalEntry[] = [];
+  let truncated = false;
+
+  while (offset < raw.length) {
+    if (offset + 4 > raw.length) { truncated = true; break; }
+
+    const encEntryLen = raw.readUInt32LE(offset); offset += 4;
+    if (offset + encEntryLen > raw.length) { truncated = true; break; }
+
+    let entryBuf: Buffer;
+    try {
+      entryBuf = transforms.decrypt(raw.subarray(offset, offset + encEntryLen));
+    } catch {
+      truncated = true;
+      break;
+    }
+    offset += encEntryLen;
+
+    // Parse the decrypted entry (same format as plaintext WAL entry)
+    const parsed = parseWalEntry(entryBuf, config);
+    if (!parsed) { truncated = true; break; }
+
+    entries.push(parsed);
+  }
+
+  const nextSequence = entries.length > 0 ? entries[entries.length - 1].sequence + 1 : 0;
+  return { entries, nextSequence, truncated };
+}
+
+function parseWalEntry(entryBuf: Buffer, config: WalConfig): WalEntry | null {
+  if (entryBuf.length < 8) return null;
+
+  let offset = 0;
+  const payloadLen = entryBuf.readUInt32LE(offset); offset += 4;
+
+  if (offset + payloadLen + 4 > entryBuf.length) return null;
+
+  const payloadStart = offset;
+  const payloadEnd = offset + payloadLen;
+
+  // Validate CRC
+  const storedCrc = entryBuf.readUInt32LE(payloadEnd);
+  const computedCrc = crc32(entryBuf.subarray(payloadStart, payloadEnd));
+  if (storedCrc !== computedCrc) return null;
+
+  const sequence = entryBuf.readUInt32LE(offset); offset += 4;
+  const opType = entryBuf.readUInt8(offset); offset += 1;
+  const idType = entryBuf.readUInt8(offset); offset += 1;
+  const idLen = entryBuf.readUInt32LE(offset); offset += 4;
+  const idStr = entryBuf.toString('utf-8', offset, offset + idLen); offset += idLen;
+
+  const id: EntryId = idType === 1 ? BigInt(idStr) : idStr;
+
+  let op: WalOperation;
+  if (opType === 0) {
+    const { quantized, offset: newOffset } = readQuantizedData(entryBuf, offset, config.quantization, config.dimensions);
+    offset = newOffset;
+    const contextLen = entryBuf.readUInt32LE(offset); offset += 4;
+    let context: Record<string, unknown> | undefined;
+    if (contextLen > 0) {
+      const contextStr = entryBuf.toString('utf-8', offset, offset + contextLen);
+      context = JSON.parse(contextStr) as Record<string, unknown>;
+    }
+    op = { type: 'put', id, quantized, context };
+  } else {
+    op = { type: 'delete', id };
+  }
+
+  return { sequence, op };
 }
 
 export function replayWal(

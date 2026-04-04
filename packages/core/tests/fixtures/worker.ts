@@ -23,6 +23,7 @@ interface InitCommand {
   staleLockTimeout?: number;
   lockAcquireTimeout?: number;
   lockRetryInterval?: number;
+  encryptionKeyHex?: string;
 }
 
 interface AddCommand {
@@ -109,6 +110,7 @@ async function handleCommand(cmd: WorkerCommand): Promise<void> {
           staleLockTimeout: cmd.staleLockTimeout,
           lockAcquireTimeout: cmd.lockAcquireTimeout,
           lockRetryInterval: cmd.lockRetryInterval,
+          ...(cmd.encryptionKeyHex ? { encryption: { key: Buffer.from(cmd.encryptionKeyHex, 'hex') } } : {}),
         });
         instance = await create({
           dimensions: cmd.dimensions,

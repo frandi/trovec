@@ -30,6 +30,14 @@ export class LockTimeoutError extends TrovecError {
   }
 }
 
+/** Thrown when encryption or decryption fails (wrong key, corrupted data, invalid config). */
+export class EncryptionError extends TrovecError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EncryptionError';
+  }
+}
+
 /** Thrown when a WAL file contains corrupted entries that cannot be replayed. */
 export class WalCorruptionError extends TrovecError {
   /** Number of valid entries recovered before corruption was detected. */

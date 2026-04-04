@@ -179,6 +179,20 @@ export interface FileStorageDriver extends StorageDriver {
   destroy(): Promise<void>;
 }
 
+/** Configuration options for encryption at rest. */
+export interface EncryptionOptions {
+  /** Raw 32-byte encryption key. Mutually exclusive with `password`. */
+  key?: Buffer;
+  /** Password for PBKDF2 key derivation. Mutually exclusive with `key`. */
+  password?: string;
+  /**
+   * Number of PBKDF2 iterations for password-based key derivation.
+   * Only used with `password`.
+   * @defaultValue `100_000`
+   */
+  iterations?: number;
+}
+
 /** Configuration options for the concurrent file-based storage driver. */
 export interface ConcurrentFileDriverOptions extends FileDriverOptions {
   /**
@@ -213,6 +227,11 @@ export interface ConcurrentFileDriverOptions extends FileDriverOptions {
    * @defaultValue `true`
    */
   checkpointOnClose?: boolean;
+  /**
+   * Encryption options for encrypting data at rest.
+   * When set, both the base collection file and WAL entries are encrypted using AES-256-GCM.
+   */
+  encryption?: EncryptionOptions;
 }
 
 /** Concurrent file-based storage driver with file locking and optional WAL support. */

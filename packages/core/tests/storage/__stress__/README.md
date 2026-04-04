@@ -70,6 +70,19 @@ Finds the practical ceiling for Trovec's file-based approach. Results can be use
 | 5.6 | Contention matrix (dims x ops x procs) | Vector size and sustained load impact on contention |
 | 5.7 | Data size impact (1K to 1M, 128d) | Init, WAL append, read, checkpoint, and memory at scale |
 
+### Encryption (`encryption.test.ts`)
+
+Benchmarks the performance impact of AES-256-GCM encryption at rest, comparing encrypted vs plaintext operations across dataset sizes and configurations.
+
+| Test | Description | Key Metric |
+|------|-------------|------------|
+| 6.1 | Encryption overhead: flush + read across dataset sizes (1K-100K, 128d) | flush/read overhead %, file size delta |
+| 6.2 | WAL append throughput: plain vs encrypted (500 appends, 128d) | avg/p50/p95/p99 latency, ops/sec |
+| 6.3 | Large vector encryption (768d, 1536d x 1K entries) | flush/read time, file size |
+| 6.4 | `withEncryption` wrapper vs concurrent driver built-in (10K x 128d) | flush/read time comparison |
+| 6.5 | Encrypted multi-process WAL writes (4 processes, 50 ops each) | throughput, flush latency distribution |
+| 6.6 | Password-based key derivation overhead (1K/10K/100K iterations) | flush/read time vs raw key baseline |
+
 ### Performance Benchmarks (`benchmarks/concurrent-file.bench.ts`)
 
 Standalone script that outputs markdown tables for documentation. Measures:
@@ -102,6 +115,7 @@ Tests 5.1, 5.2, and 5.3 write structured JSON reports to `tests/storage/__stress
 | `contention-scaling.json` | Per-operation flush timing (min/max/avg/p50/p95/p99), throughput, failure rate, and polling overhead estimates across process counts |
 | `contention-matrix.json` | Same metrics as contention-scaling but across a matrix of vector sizes (3d, 384d, 768d) and ops/worker (50, 200) |
 | `datasize-operations.json` | Per-tier benchmarks for init, WAL append, read, checkpoint, memory at collection sizes from 1K to 1M entries |
+| `encryption-overhead.json` | Flush/read times and file sizes for plain vs encrypted across dataset sizes |
 
 ## Architecture
 
