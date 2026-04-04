@@ -42,6 +42,7 @@ export { createFileDriver } from './storage/file.js';
 
 export { createConcurrentFileDriver } from './storage/concurrent-file.js';
 
-export { withEncryption } from './storage/encryption.js';
+export { withEncryption, decryptBuffer, resolveEncryptionKey } from './storage/encryption.js';
+export type { ResolvedEncryption } from './storage/encryption.js';
 
 export { serialize, deserialize } from './serialization.js';

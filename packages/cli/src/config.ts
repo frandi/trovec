@@ -10,6 +10,7 @@ export interface ProjectConfig {
   embedder?: string;
   collectionId?: string;
   autoFlush?: boolean | number;
+  encrypted?: boolean;
 }
 
 export interface GlobalConfig {
@@ -23,7 +24,10 @@ export interface GlobalConfig {
   defaultTopK?: number;
 }
 
-export interface MergedConfig extends ProjectConfig, GlobalConfig {}
+export interface MergedConfig extends ProjectConfig, GlobalConfig {
+  encryptionKey?: string;
+  encryptionPassword?: string;
+}
 
 export function getGlobalConfigDir(): string {
   const xdg = process.env['XDG_CONFIG_HOME'];
@@ -89,6 +93,8 @@ export interface CliFlags {
   'ollama-url'?: string;
   'ollama-model'?: string;
   'top-k'?: number;
+  'encryption-key'?: string;
+  'encryption-password'?: string;
   [key: string]: unknown;
 }
 
@@ -114,6 +120,7 @@ export function mergeConfig(flags: CliFlags, fallback?: ProjectConfig): MergedCo
     metric: (flags.metric ?? project.metric ?? fallback?.metric) as ProjectConfig['metric'],
     collectionId: flags.collection ?? project.collectionId,
     autoFlush: project.autoFlush,
+    encrypted: project.encrypted,
 
     // Embedder settings (flag > env > project > global)
     embedder: flags.embedder ?? process.env['TROVEC_EMBEDDER'] ?? project.embedder ?? global.embedder,
@@ -122,6 +129,10 @@ export function mergeConfig(flags: CliFlags, fallback?: ProjectConfig): MergedCo
     openaiBaseUrl: flags['openai-base-url'] ?? global.openaiBaseUrl,
     ollamaUrl: flags['ollama-url'] ?? process.env['OLLAMA_BASE_URL'] ?? global.ollamaUrl,
     ollamaModel: flags['ollama-model'] ?? global.ollamaModel,
+
+    // Encryption settings (flag > env)
+    encryptionKey: flags['encryption-key'] ?? process.env['TROVEC_ENCRYPTION_KEY'],
+    encryptionPassword: flags['encryption-password'] ?? process.env['TROVEC_ENCRYPTION_PASSWORD'],
 
     // Output settings
     defaultFormat: flags.format ?? global.defaultFormat,

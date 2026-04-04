@@ -26,12 +26,14 @@ Commands:
   completions     Generate shell completions
 
 Global Options:
-  --dir <path>        Storage directory (default: .trovec/)
-  --collection <id>   Collection ID (default: default)
-  --format <fmt>      Output format: table, json, jsonl, csv
-  --quiet             Suppress status messages
-  --help              Show help
-  --version           Show version
+  --dir <path>                  Storage directory (default: .trovec/)
+  --collection <id>             Collection ID (default: default)
+  --format <fmt>                Output format: table, json, jsonl, csv
+  --encryption-key <hex>        AES-256 key (64 hex chars) or TROVEC_ENCRYPTION_KEY env
+  --encryption-password <pass>  Password for key derivation or TROVEC_ENCRYPTION_PASSWORD env
+  --quiet                       Suppress status messages
+  --help                        Show help
+  --version                     Show version
 
 Run "trovec <command> --help" for command-specific help.
 `.trim();
@@ -50,11 +52,14 @@ Options:
   --openai-key <key>           OpenAI API key
   --ollama-url <url>           Ollama server URL
   --ollama-model <model>       Ollama model name
+  --encryption-key <hex>       Enable encryption with a 32-byte hex key
+  --encryption-password <pass> Enable encryption with a password (PBKDF2)
 
 Examples:
   trovec init --dimensions 64 --embedder local
   trovec init --embedder openai --openai-key sk-...
-  trovec init --dimensions 128 --quantization INT8 --metric euclidean`.trim(),
+  trovec init --dimensions 128 --quantization INT8 --metric euclidean
+  trovec init --dimensions 384 --encryption-password "my-secret"`.trim(),
 
   add: `
 Usage: trovec add <id> [options]
@@ -221,10 +226,13 @@ Read a raw .trovec file and display its contents.
 
 Options:
   --header                     Show only header information
+  --encryption-key <hex>       Decrypt with a 32-byte hex key
+  --encryption-password <pass> Decrypt with a password
 
 Examples:
   trovec inspect .trovec/default.trovec
-  trovec inspect data.trovec --header --format json`.trim(),
+  trovec inspect data.trovec --header --format json
+  trovec inspect data.trovec --encryption-key abc123...`.trim(),
 
   config: `
 Usage: trovec config <subcommand> [args]
@@ -249,6 +257,10 @@ Examples:
 Usage: trovec repl
 
 Launch interactive REPL with MongoDB-style query language.
+
+For encrypted projects, the REPL will prompt for the password
+interactively if no --encryption-key / --encryption-password or
+TROVEC_ENCRYPTION_* env var is provided.
 
 Commands in REPL:
   db.find([filter])            Query entries
@@ -318,6 +330,9 @@ const OPTIONS_CONFIG = {
   header: { type: 'boolean' as const },
   // config
   global: { type: 'boolean' as const },
+  // encryption
+  'encryption-key': { type: 'string' as const },
+  'encryption-password': { type: 'string' as const },
 };
 
 function parseCliArgs(argv: string[]): { command: string; positionals: string[]; flags: CliFlags } {

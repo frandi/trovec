@@ -1,5 +1,5 @@
-import { create, createFileDriver } from '@trovec/core';
-import type { Trovec, TrovecConfig, Embedder } from '@trovec/core';
+import { create, createFileDriver, withEncryption } from '@trovec/core';
+import type { Trovec, TrovecConfig, Embedder, StorageDriver, EncryptionOptions } from '@trovec/core';
 import { CliError } from './errors.js';
 import { mergeConfig, resolveDir, projectConfigExists, inferConfigFromDir } from './config.js';
 import type { CliFlags, MergedConfig, ProjectConfig } from './config.js';
@@ -29,18 +29,58 @@ export async function openDb(flags: CliFlags): Promise<Trovec> {
   }
 
   const embedder = merged.embedder ? await resolveEmbedder(merged) : undefined;
+  const encryptionOpts = resolveEncryptionFlags(merged);
+
+  let driver: StorageDriver = createFileDriver({ directory: dir });
+  if (encryptionOpts) {
+    driver = withEncryption(driver, encryptionOpts);
+  } else if (merged.encrypted) {
+    throw new CliError(
+      'This project uses encryption but no key was provided.',
+      'Provide --encryption-key <hex>, --encryption-password <pass>, or set TROVEC_ENCRYPTION_KEY / TROVEC_ENCRYPTION_PASSWORD.',
+    );
+  }
 
   const config: TrovecConfig = {
     dimensions: merged.dimensions,
     quantization: merged.quantization,
     metric: merged.metric,
     collectionId: merged.collectionId ?? 'default',
-    storageDriver: createFileDriver({ directory: dir }),
+    storageDriver: driver,
     embedder,
     autoFlush: merged.autoFlush,
   };
 
   return create(config);
+}
+
+export function resolveEncryptionFlags(config: MergedConfig): EncryptionOptions | undefined {
+  const hexKey = config.encryptionKey;
+  const password = config.encryptionPassword;
+
+  if (hexKey && password) {
+    throw new CliError(
+      'Cannot use both --encryption-key and --encryption-password.',
+      'Provide exactly one.',
+    );
+  }
+
+  if (hexKey) {
+    const buf = Buffer.from(hexKey, 'hex');
+    if (buf.length !== 32) {
+      throw new CliError(
+        `Encryption key must be exactly 32 bytes (64 hex characters), got ${buf.length} bytes.`,
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+      );
+    }
+    return { key: buf };
+  }
+
+  if (password) {
+    return { password };
+  }
+
+  return undefined;
 }
 
 async function resolveEmbedder(config: MergedConfig): Promise<Embedder> {
