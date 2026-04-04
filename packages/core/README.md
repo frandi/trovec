@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="./icon.png" alt="Trovec" width="128" height="128" />
+</p>
+
 # @trovec/core
+
+[![npm](https://img.shields.io/npm/v/@trovec/core)](https://www.npmjs.com/package/@trovec/core)
 
 A lightweight, zero-dependency vector database library for Node.js. Store, query, and persist vector embeddings with support for multiple quantization types and similarity metrics.
 

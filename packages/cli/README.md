@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./icon.png" alt="Trovec" width="128" height="128" />
+</p>
+
 # @trovec/cli
 
 [![npm](https://img.shields.io/npm/v/@trovec/cli)](https://www.npmjs.com/package/@trovec/cli)

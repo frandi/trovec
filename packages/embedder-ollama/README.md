@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="./icon.png" alt="Trovec" width="128" height="128" />
+</p>
+
 # @trovec/embedder-ollama
+
+[![npm](https://img.shields.io/npm/v/@trovec/embedder-ollama)](https://www.npmjs.com/package/@trovec/embedder-ollama)
 
 Ollama embeddings adapter for [Trovec](../core/README.md). Converts text to vector embeddings using a locally running [Ollama](https://ollama.com/) server.
 

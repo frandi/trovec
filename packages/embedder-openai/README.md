@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="./icon.png" alt="Trovec" width="128" height="128" />
+</p>
+
 # @trovec/embedder-openai
+
+[![npm](https://img.shields.io/npm/v/@trovec/embedder-openai)](https://www.npmjs.com/package/@trovec/embedder-openai)
 
 OpenAI embeddings adapter for [Trovec](../core/README.md). Converts text to vector embeddings using the OpenAI Embeddings API.
 

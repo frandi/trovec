@@ -1,7 +1,8 @@
 {
   "name": "@trovec/cli",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Command-line interface for the Trovec vector database",
+  "author": "frandi-tech",
   "type": "module",
   "main": "./dist/esm/main.js",
   "types": "./dist/esm/main.d.ts",
@@ -23,6 +24,7 @@
   "files": [
     "dist",
     "bin",
+    "icon.png",
     "README.md",
     "LICENSE"
   ],
@@ -59,12 +61,12 @@
     "directory": "packages/cli"
   },
   "dependencies": {
-    "@trovec/core": "^2.0.0",
-    "@trovec/embedder-local": "^2.0.0"
+    "@trovec/core": "^2.2.0",
+    "@trovec/embedder-local": "^2.2.0"
   },
   "optionalDependencies": {
-    "@trovec/embedder-openai": "^2.0.0",
-    "@trovec/embedder-ollama": "^2.0.0"
+    "@trovec/embedder-openai": "^2.2.0",
+    "@trovec/embedder-ollama": "^2.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

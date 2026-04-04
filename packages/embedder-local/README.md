@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="./icon.png" alt="Trovec" width="128" height="128" />
+</p>
+
 # @trovec/embedder-local
+
+[![npm](https://img.shields.io/npm/v/@trovec/embedder-local)](https://www.npmjs.com/package/@trovec/embedder-local)
 
 A zero-dependency local text embedder for [Trovec](../core/README.md). Converts text to vector embeddings using character n-gram hashing — no API keys, no model files, no setup required.
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./packages/vscode-trovec/media/icon.png" alt="Trovec" width="128" height="128" />
+</p>
+
 # Trovec
 
 A lightweight, zero-dependency vector database ecosystem for Node.js.
