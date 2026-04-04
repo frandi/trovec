@@ -1,7 +1,21 @@
 .vscode/**
+.vscode-test/**
 src/**
 node_modules/**
 tsconfig.json
 **/*.ts
 **/*.map
 *.vsix
+.gitignore
+
+# Secrets — never package any env files regardless of location
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+
+# Defense in depth: never package anything from outside the extension dir.
+# These only matter if vsce's file walker reaches sibling paths (e.g. when
+# --no-dependencies is forgotten). Keep them so accidents can't leak secrets.
+../**
+../../**

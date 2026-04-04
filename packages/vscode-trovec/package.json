@@ -40,7 +40,8 @@
     "build": "tsc",
     "watch": "tsc --watch",
     "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
-    "package": "npx @vscode/vsce package --no-dependencies"
+    "package": "npx @vscode/vsce package --no-dependencies",
+    "publish": "npx @vscode/vsce publish --no-dependencies"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
