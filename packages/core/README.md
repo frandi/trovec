@@ -195,6 +195,36 @@ await db.close();
 const db2 = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test' });
 ```
 
+### Custom Storage Drivers
+
+The `StorageDriver` interface is intentionally minimal — four async methods — making it straightforward to write drivers for any storage backend:
+
+```typescript
+import type { StorageDriver } from '@trovec/core';
+
+interface StorageDriver {
+  write(collectionId: string, data: Buffer): Promise<void>;
+  read(collectionId: string): Promise<Buffer | null>;
+  exists(collectionId: string): Promise<boolean>;
+  delete(collectionId: string): Promise<boolean>;
+}
+```
+
+This opens up several deployment scenarios:
+
+| Environment | Approach |
+|---|---|
+| **Azure App Service / mounted disk** | Use the built-in `createFileDriver({ directory: '/mnt/data' })` — point to the mounted path |
+| **Kubernetes with persistent volumes** | Same as above — point the directory to the mounted volume path |
+| **Amazon S3 / Azure Blob Storage** | Implement `StorageDriver` using the respective SDK (`@aws-sdk/client-s3`, `@azure/storage-blob`) — `write` maps to `PutObject`/`uploadBlockBlob`, `read` to `GetObject`/`downloadToBuffer`, etc. |
+| **Google Cloud Storage** | Implement using `@google-cloud/storage` — same pattern as S3/Azure Blob |
+| **Redis / Memcached** | Implement using `ioredis` or similar — `write`/`read` map directly to `SET`/`GET` with binary data |
+| **SQLite / PostgreSQL** | Store serialized buffers in a `BYTEA`/`BLOB` column keyed by collection ID |
+
+> **Note:** Cloud storage drivers typically have higher latency (50-500ms per operation) compared to local file I/O (< 1ms). Since Trovec loads the full dataset into memory on `create()` and only touches storage on flush, this latency mainly affects startup and persist — queries remain sub-millisecond regardless of backend.
+>
+> Community contributions for storage drivers are welcome. Publish them as separate packages (e.g., `trovec-driver-s3`) to keep `@trovec/core` zero-dependency.
+
 ### Text Embedding (with adapter)
 
 Trovec provides an `Embedder` interface for text-to-vector conversion. Install an adapter package, then use text-based methods:
@@ -365,8 +395,9 @@ All math operations use **float64 precision** internally (`Float64Array`). The q
 
 ### Extensibility
 
-Three extension points are available:
+Four extension points are available:
 
+- **`StorageDriver`** — custom persistence backends (see [Custom Storage Drivers](#custom-storage-drivers))
 - **`Embedder`** — text-to-vector conversion (see below)
 - **`QuantizationCodec`** — implement `encode(embedding) => QuantizedVector` and `decode(quantized) => number[]`
 - **`SimilarityFn`** — implement `(a: QuantizedVector, b: QuantizedVector) => number`
