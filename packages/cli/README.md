@@ -87,6 +87,8 @@ trovec init --dimensions 128 --quantization INT8 --metric euclidean
 | `--openai-key <key>` | OpenAI API key |
 | `--ollama-url <url>` | Ollama server URL |
 | `--ollama-model <model>` | Ollama model name |
+| `--encryption-key <hex>` | Enable AES-256-GCM encryption with a 32-byte hex key |
+| `--encryption-password <pass>` | Enable encryption with password-based key derivation (PBKDF2) |
 
 Default dimensions per embedder: `local` = 64, `openai` = 1536, `ollama` = 768.
 
@@ -209,11 +211,12 @@ echo "hello" | trovec embed --stdin
 
 #### `trovec inspect`
 
-Read a raw `.trovec` binary file without opening a full database instance.
+Read a raw `.trovec` binary file without opening a full database instance. Supports encrypted files when a key or password is provided.
 
 ```bash
 trovec inspect .trovec/default.trovec
 trovec inspect data.trovec --header --format json
+trovec inspect data.trovec --encryption-password "my-secret"
 ```
 
 ### Bulk Import / Export
@@ -257,6 +260,8 @@ Environment variables are also supported:
 |----------|-------------|
 | `TROVEC_DIR` | Storage directory (default: `.trovec/`) |
 | `TROVEC_EMBEDDER` | Embedder name |
+| `TROVEC_ENCRYPTION_KEY` | AES-256 encryption key (64 hex characters) |
+| `TROVEC_ENCRYPTION_PASSWORD` | Password for PBKDF2 key derivation |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `OLLAMA_BASE_URL` | Ollama server URL |
 
@@ -285,6 +290,8 @@ trovec:default> .exit
 
 Meta-commands: `.help`, `.exit`, `.format json|table`, `.clear`.
 
+For encrypted projects, the REPL prompts for the password interactively (with hidden input) if it wasn't provided via `--encryption-key` / `--encryption-password` or the `TROVEC_ENCRYPTION_*` env vars. This avoids leaking passwords into shell history or `ps` output.
+
 ### Shell Completions
 
 ```bash
@@ -309,6 +316,8 @@ These options work with all commands:
 | `--dir <path>` | Storage directory (default: `.trovec/`) |
 | `--collection <id>` | Collection ID (default: `default`) |
 | `--format <fmt>` | Output format: `table`, `json`, `jsonl`, `csv` |
+| `--encryption-key <hex>` | AES-256 encryption key (64 hex characters) |
+| `--encryption-password <pass>` | Password for PBKDF2 key derivation |
 | `--quiet` | Suppress status messages |
 | `--help` | Show help for a command |
 | `--version` | Show version |

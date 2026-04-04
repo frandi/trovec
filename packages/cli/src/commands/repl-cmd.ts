@@ -6,13 +6,35 @@ import { formatOutput } from '../output.js';
 import { buildFilterFn } from '../filter.js';
 import { CliError } from '../errors.js';
 import type { CliFlags } from '../config.js';
-import { getGlobalConfigDir } from '../config.js';
+import { getGlobalConfigDir, mergeConfig, projectConfigExists, resolveDir } from '../config.js';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 let outputFormat: 'table' | 'json' = 'table';
 
 export async function replCommand(flags: CliFlags): Promise<void> {
+  // If the project is encrypted but no key/password was provided, prompt interactively.
+  // This avoids leaking passwords via argv (ps, shell history) and saves the user from
+  // having to exit and re-launch with the flag.
+  const dir = resolveDir(flags);
+  if (projectConfigExists(dir)) {
+    const merged = mergeConfig(flags);
+    const hasKey = merged.encryptionKey || merged.encryptionPassword;
+    if (merged.encrypted && !hasKey) {
+      if (!stdin.isTTY) {
+        throw new CliError(
+          'This project uses encryption but no key was provided.',
+          'Provide --encryption-key <hex>, --encryption-password <pass>, or set TROVEC_ENCRYPTION_KEY / TROVEC_ENCRYPTION_PASSWORD.',
+        );
+      }
+      const password = await promptPassword('Encryption password: ');
+      if (!password) {
+        throw new CliError('No password provided.');
+      }
+      flags['encryption-password'] = password;
+    }
+  }
+
   const db = await openDb(flags);
   const collectionId = db.config.collectionId;
 
@@ -321,6 +343,50 @@ function compare(a: unknown, b: unknown): number {
   if (b == null) return 1;
   if (typeof a === 'number' && typeof b === 'number') return a - b;
   return String(a).localeCompare(String(b));
+}
+
+/**
+ * Read a password from stdin with input hidden (no echo).
+ * Requires a TTY — callers should check `stdin.isTTY` first.
+ */
+function promptPassword(prompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    stderr.write(prompt);
+    stdin.setRawMode(true);
+    stdin.resume();
+    stdin.setEncoding('utf8');
+
+    let password = '';
+    const onData = (chunk: string): void => {
+      for (const char of chunk) {
+        if (char === '\r' || char === '\n') {
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.removeListener('data', onData);
+          stderr.write('\n');
+          resolve(password);
+          return;
+        }
+        if (char === '\u0003') {
+          // Ctrl+C
+          stdin.setRawMode(false);
+          stdin.pause();
+          stdin.removeListener('data', onData);
+          stderr.write('\n');
+          reject(new CliError('Cancelled.'));
+          return;
+        }
+        if (char === '\u007f' || char === '\b') {
+          // Backspace / DEL
+          if (password.length > 0) password = password.slice(0, -1);
+        } else if (char >= ' ') {
+          password += char;
+        }
+      }
+    };
+
+    stdin.on('data', onData);
+  });
 }
 
 function loadHistory(path: string): string[] {

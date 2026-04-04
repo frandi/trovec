@@ -1,9 +1,17 @@
 import { readFileSync, statSync } from 'node:fs';
 import { brotliDecompressSync } from 'node:zlib';
 import { formatOutput, detectFormat } from '../output.js';
+import { mergeConfig } from '../config.js';
+import { resolveEncryptionFlags } from '../db-manager.js';
 import { CliError } from '../errors.js';
 import { MAGIC, parseHeader } from '../trovec-header.js';
 import type { CliFlags } from '../config.js';
+
+/** Check if raw data looks like an encrypted trovec file (encryption header format v1). */
+function looksEncrypted(data: Buffer): boolean {
+  // Encrypted format: [0]=version(1), [1]=mode(0 or 1), then salt+iv+tag = 46 byte header
+  return data.length >= 46 && data[0] === 1 && (data[1] === 0 || data[1] === 1);
+}
 
 export async function inspectCommand(positionals: string[], flags: CliFlags): Promise<void> {
   const filePath = positionals[0];
@@ -24,6 +32,34 @@ export async function inspectCommand(positionals: string[], flags: CliFlags): Pr
     data = brotliDecompressSync(raw);
   } catch {
     data = raw;
+  }
+
+  // If data doesn't start with magic bytes, it might be encrypted
+  let encrypted = false;
+  if (data.length >= 4 && !data.subarray(0, 4).equals(MAGIC)) {
+    if (looksEncrypted(data)) {
+      const merged = mergeConfig(flags);
+      const encryptionOpts = resolveEncryptionFlags(merged);
+
+      if (!encryptionOpts) {
+        throw new CliError(
+          'File appears to be encrypted.',
+          'Provide --encryption-key <hex> or --encryption-password <pass> to decrypt.',
+        );
+      }
+
+      // Decrypt, then try brotli decompression on the plaintext
+      const { decryptBuffer, resolveEncryptionKey } = await import('@trovec/core');
+      const resolved = resolveEncryptionKey(encryptionOpts);
+      const decrypted = decryptBuffer(data, resolved);
+
+      try {
+        data = brotliDecompressSync(decrypted);
+      } catch {
+        data = decrypted;
+      }
+      encrypted = true;
+    }
   }
 
   if (data.length < 16) {
@@ -51,6 +87,7 @@ export async function inspectCommand(positionals: string[], flags: CliFlags): Pr
     fileSize: formatSize(fileSize),
     rawSize: formatSize(data.length),
     compressed: data.length !== fileSize,
+    encrypted,
   };
 
   process.stdout.write(formatOutput(info, format) + '\n');

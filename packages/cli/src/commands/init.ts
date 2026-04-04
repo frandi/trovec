@@ -1,7 +1,8 @@
-import { create, createFileDriver } from '@trovec/core';
-import type { TrovecConfig } from '@trovec/core';
-import { writeProjectConfig, resolveDir, projectConfigExists } from '../config.js';
+import { create, createFileDriver, withEncryption } from '@trovec/core';
+import type { TrovecConfig, StorageDriver } from '@trovec/core';
+import { writeProjectConfig, resolveDir, projectConfigExists, mergeConfig } from '../config.js';
 import type { CliFlags, ProjectConfig } from '../config.js';
+import { resolveEncryptionFlags } from '../db-manager.js';
 import { CliError } from '../errors.js';
 import { success, warn } from '../output.js';
 
@@ -34,6 +35,10 @@ export async function initCommand(flags: CliFlags): Promise<void> {
   const metric = (flags.metric ?? 'cosine') as ProjectConfig['metric'];
   const collectionId = flags.collection ?? 'default';
 
+  // Resolve encryption from flags/env
+  const merged = mergeConfig(flags);
+  const encryptionOpts = resolveEncryptionFlags(merged);
+
   // Write project config
   const projectConfig: ProjectConfig = {
     dimensions,
@@ -47,15 +52,24 @@ export async function initCommand(flags: CliFlags): Promise<void> {
     projectConfig.embedder = embedder;
   }
 
+  if (encryptionOpts) {
+    projectConfig.encrypted = true;
+  }
+
   writeProjectConfig(dir, projectConfig);
 
   // Create and immediately close the db to initialize the storage file
+  let driver: StorageDriver = createFileDriver({ directory: dir });
+  if (encryptionOpts) {
+    driver = withEncryption(driver, encryptionOpts);
+  }
+
   const config: TrovecConfig = {
     dimensions,
     quantization,
     metric,
     collectionId,
-    storageDriver: createFileDriver({ directory: dir }),
+    storageDriver: driver,
     autoFlush: false,
   };
 
@@ -69,5 +83,8 @@ export async function initCommand(flags: CliFlags): Promise<void> {
   success(`  collection:   ${collectionId}`);
   if (embedder) {
     success(`  embedder:     ${embedder}`);
+  }
+  if (encryptionOpts) {
+    success(`  encryption:   AES-256-GCM (${'key' in encryptionOpts && encryptionOpts.key ? 'raw key' : 'password'})`);
   }
 }
