@@ -87,6 +87,17 @@ const driver = withEncryption(createFileDriver(), {
 
 Password mode is convenient but slower: key derivation adds ~100-200ms per read/write operation (at 100K iterations). A single-entry cache avoids re-derivation on consecutive reads of the same collection.
 
+### Which Should I Use?
+
+| Scenario | Recommended | Why |
+|---|---|---|
+| Server/production app with a secrets manager (Vault, AWS KMS, env vars) | `key` | You already have secure key storage — skip the PBKDF2 cost |
+| CLI tool or local app where a user types a passphrase | `password` | Humans can remember passphrases; raw 32-byte keys are impractical to type |
+| High-throughput writes (many flushes/appends) | `key` | Avoids PBKDF2 derivation overhead on every operation |
+| Quick prototyping / dev environment | `password` | Just pass a string — no key generation step needed |
+
+**Rule of thumb:** if a human provides the secret, use `password`. If a machine manages it, use `key`.
+
 > **Important:** If you lose the key or password, the data is **unrecoverable**. Trovec does not store keys or provide key recovery.
 
 ## How It Works
