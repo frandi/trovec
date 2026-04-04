@@ -193,15 +193,15 @@ const driver = withEncryption(createFileDriver(), { key });
 const db = await create({ dimensions: 384, storageDriver: driver });
 ```
 
-For concurrent access with WAL + encryption, pass the `encryption` option directly to the concurrent driver:
+`withEncryption` works with any driver — including the concurrent file driver with WAL:
 
 ```typescript
-import { createConcurrentFileDriver } from '@trovec/core';
+import { createConcurrentFileDriver, withEncryption } from '@trovec/core';
 
-const driver = createConcurrentFileDriver({
-  wal: true,
-  encryption: { key },  // or { password: 'my-passphrase' }
-});
+const driver = withEncryption(
+  createConcurrentFileDriver({ wal: true }),
+  { key },  // or { password: 'my-passphrase' }
+);
 ```
 
 Password-based key derivation (PBKDF2) is also supported for convenience. See the [encryption docs](../../docs/encryption.md) for the full threat model, encrypted format specification, and performance analysis.

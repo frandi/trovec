@@ -7,7 +7,7 @@
  * adds a batch of entries with a worker-specific ID prefix, flushes, and closes.
  * Prints a JSON result to stdout when done.
  */
-import { create, createConcurrentFileDriver } from '@trovec/core';
+import { create, createConcurrentFileDriver, withEncryption } from '@trovec/core';
 import { createLocalEmbedder } from '@trovec/embedder-local';
 
 const [directory, collectionId, workerIndexStr, dimensionsStr, entryCountStr, encryptionKeyHex] = process.argv.slice(2);
@@ -16,11 +16,13 @@ const dimensions = parseInt(dimensionsStr, 10);
 const entryCount = parseInt(entryCountStr, 10);
 
 async function run() {
-  const driver = createConcurrentFileDriver({
+  const baseDriver = createConcurrentFileDriver({
     directory,
     wal: true,
-    ...(encryptionKeyHex ? { encryption: { key: Buffer.from(encryptionKeyHex, 'hex') } } : {}),
   });
+  const driver = encryptionKeyHex
+    ? withEncryption(baseDriver, { key: Buffer.from(encryptionKeyHex, 'hex') })
+    : baseDriver;
   const embedder = createLocalEmbedder({ dimensions, warn: false });
 
   const db = await create({

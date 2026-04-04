@@ -142,16 +142,20 @@ export function decryptBuffer(encrypted: Buffer, resolved: ResolvedEncryption): 
 }
 
 /**
- * Create an encrypted storage driver that wraps another driver.
+ * Add transparent AES-256-GCM encryption to any storage driver.
  *
- * Encrypts the entire buffer on `write()` and decrypts on `read()` using AES-256-GCM.
- * This wrapper does NOT propagate WAL-awareness — when wrapping a WAL-aware driver,
- * the returned driver is a plain {@link StorageDriver}. Use the `encryption` option
- * on `createConcurrentFileDriver` for WAL encryption support.
+ * If the driver implements {@link StorageDriver.configureEncryption | configureEncryption},
+ * encryption is delegated to the driver itself (preserving internal concerns like
+ * compress-then-encrypt ordering and WAL encryption). The original driver is returned
+ * as-is so that its full interface (e.g. {@link WalAwareDriver}) is preserved.
  *
- * @param innerDriver - The storage driver to wrap.
+ * Otherwise, a thin wrapper is returned that encrypts on `write()` and decrypts on
+ * `read()`. This is the path community / custom drivers take — they get encryption
+ * for free without implementing it themselves.
+ *
+ * @param innerDriver - The storage driver to encrypt.
  * @param options - Encryption configuration (raw key or password).
- * @returns A new {@link StorageDriver} that encrypts/decrypts data transparently.
+ * @returns The driver with encryption enabled.
  * @throws {EncryptionError} If encryption options are invalid.
  *
  * @example
@@ -163,10 +167,22 @@ export function decryptBuffer(encrypted: Buffer, resolved: ResolvedEncryption): 
  * });
  * ```
  */
-export function withEncryption(innerDriver: StorageDriver, options: EncryptionOptions): StorageDriver {
+export function withEncryption<T extends StorageDriver>(innerDriver: T, options: EncryptionOptions): T {
+  // Validate options eagerly regardless of path
+  resolveEncryptionKey(options);
+
+  // Built-in drivers handle encryption internally (correct ordering, WAL support)
+  if (innerDriver.configureEncryption) {
+    innerDriver.configureEncryption(options);
+    return innerDriver;
+  }
+
+  // Fallback wrapper for community / custom drivers
   const resolved = resolveEncryptionKey(options);
 
   return {
+    ...innerDriver,
+
     async write(collectionId: string, data: Buffer): Promise<void> {
       const encrypted = encryptBuffer(data, resolved);
       await innerDriver.write(collectionId, encrypted);

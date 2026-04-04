@@ -34,49 +34,31 @@ await db.close();
 // The .trovec file on disk is fully encrypted — no plaintext data or headers
 ```
 
-## Two Integration Points
+## Usage
 
-Trovec provides encryption through two complementary approaches, depending on whether you need WAL (Write-Ahead Log) support.
-
-### 1. `withEncryption()` Wrapper (any driver, no WAL)
-
-A composable wrapper that encrypts the entire buffer on `write()` and decrypts on `read()`. Works with **any** `StorageDriver` — file, memory, or custom.
+Trovec provides a single, uniform API for encryption: `withEncryption()`. It works with **every** storage driver — built-in or custom.
 
 ```typescript
-import { createFileDriver, withEncryption } from '@trovec/core';
+import { createFileDriver, createConcurrentFileDriver, withEncryption } from '@trovec/core';
 
-const driver = withEncryption(createFileDriver(), {
-  key: Buffer.from('0123456789abcdef0123456789abcdef'), // 32 bytes
-});
+// File driver
+const driver = withEncryption(createFileDriver(), { key: myKey });
+
+// Concurrent driver with WAL — same API, encryption covers WAL entries too
+const walDriver = withEncryption(
+  createConcurrentFileDriver({ directory: './data', wal: true }),
+  { key: myKey },
+);
+
+// Custom / community drivers — encryption is handled transparently
+const s3Driver = withEncryption(myCustomS3Driver, { key: myKey });
 ```
 
-The wrapper **does not propagate WAL-awareness**. When wrapping a concurrent file driver, the resulting driver is a plain `StorageDriver` — `core.ts` always takes the full serialize+write path. The inner driver's file locking still works; only WAL delta writes are bypassed.
+### How It Works Under the Hood
 
-### 2. Concurrent Driver with Built-in Encryption (WAL + encryption)
+Built-in drivers (file, concurrent file) implement an optional `configureEncryption()` hook. When present, `withEncryption()` delegates to the driver itself — this ensures correct **compress-then-encrypt** ordering and native WAL encryption support. The original driver is returned as-is, preserving its full interface (WAL-awareness, `destroy()`, etc.).
 
-When you need both WAL and encryption, pass the `encryption` option directly to the concurrent driver. This encrypts both the base collection file (whole-file) and individual WAL entries (per-entry).
-
-```typescript
-import { createConcurrentFileDriver } from '@trovec/core';
-
-const driver = createConcurrentFileDriver({
-  directory: './data',
-  wal: true,
-  encryption: { key: myKey },
-});
-```
-
-### Why Two Approaches?
-
-The concurrent driver's `appendWal()` serializes `WalOperation` objects into binary format internally and appends them to the WAL file. A wrapper sitting outside the driver cannot intercept individual WAL entry bytes — `WalOperation` is a structured type, not a buffer. To encrypt WAL entries, the encryption transforms must be passed directly into the WAL serialization functions.
-
-| Feature | `withEncryption()` | Concurrent driver `encryption` |
-|---|---|---|
-| Base file encryption | Yes | Yes |
-| WAL entry encryption | No (WAL disabled) | Yes |
-| Works with any driver | Yes | Only concurrent driver |
-| File locking | Depends on inner driver | Yes |
-| Composable | Yes | Built-in |
+For community / custom drivers that don't implement this hook, `withEncryption()` returns a thin wrapper that encrypts on `write()` and decrypts on `read()`. Custom drivers get encryption for free without implementing it themselves.
 
 ## Key Management
 
@@ -246,25 +228,13 @@ At small sizes, encryption overhead is within noise. At 100K entries (the practi
 | `password` | `string` | — | Password for PBKDF2 key derivation (mutually exclusive with `key`) |
 | `iterations` | `number` | `100_000` | PBKDF2 iteration count (only with `password`) |
 
-### `createConcurrentFileDriver({ encryption })`
+Works with any `StorageDriver`. For built-in drivers, encryption is handled internally (compress-then-encrypt, WAL support). For custom drivers, a transparent encrypt/decrypt wrapper is applied.
 
-Accepts the same `EncryptionOptions` as `withEncryption`. When set, both the base collection file and WAL entries are encrypted.
-
-```typescript
-const driver = createConcurrentFileDriver({
-  directory: './data',
-  wal: true,
-  encryption: {
-    key: myKey,        // or password: 'my-passphrase'
-  },
-});
-```
-
-## When to Use Which
+## When to Use
 
 | Scenario | Recommended Approach |
 |---|---|
 | Single-process app with sensitive data | `withEncryption(createFileDriver(), { key })` |
-| Multi-process with sensitive data | `createConcurrentFileDriver({ encryption: { key }, wal: true })` |
+| Multi-process with sensitive data | `withEncryption(createConcurrentFileDriver({ wal: true }), { key })` |
 | Testing or non-sensitive data | No encryption needed |
 | Custom storage driver (S3, Redis, etc.) | `withEncryption(myCustomDriver, { key })` |

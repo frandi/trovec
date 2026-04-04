@@ -8,6 +8,7 @@
  * Run via: child_process.fork('tests/fixtures/worker.ts', [], { execArgv: ['--import', 'tsx'] })
  */
 import { createConcurrentFileDriver } from '../../src/storage/concurrent-file.js';
+import { withEncryption } from '../../src/storage/encryption.js';
 import { create, flush, close } from '../../src/core.js';
 import { add, addMany, get, del } from '../../src/collection.js';
 import type { Trovec, TrovecInstance } from '../../src/types.js';
@@ -104,14 +105,16 @@ async function handleCommand(cmd: WorkerCommand): Promise<void> {
   try {
     switch (cmd.type) {
       case 'init': {
-        const driver = createConcurrentFileDriver({
+        const baseDriver = createConcurrentFileDriver({
           directory: cmd.dir,
           wal: cmd.wal ?? false,
           staleLockTimeout: cmd.staleLockTimeout,
           lockAcquireTimeout: cmd.lockAcquireTimeout,
           lockRetryInterval: cmd.lockRetryInterval,
-          ...(cmd.encryptionKeyHex ? { encryption: { key: Buffer.from(cmd.encryptionKeyHex, 'hex') } } : {}),
         });
+        const driver = cmd.encryptionKeyHex
+          ? withEncryption(baseDriver, { key: Buffer.from(cmd.encryptionKeyHex, 'hex') })
+          : baseDriver;
         instance = await create({
           dimensions: cmd.dimensions,
           storageDriver: driver,

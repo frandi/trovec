@@ -263,10 +263,11 @@ async function main() {
       const concurrentDriver = createConcurrentFileDriver({
         directory: DEMO_DIR,
         wal: true,
-        ...(useEncryption && encryptionKey ? { encryption: { key: encryptionKey } } : {}),
       });
       fileDriver = concurrentDriver;
-      storageDriverForTrovec = concurrentDriver;
+      storageDriverForTrovec = useEncryption && encryptionKey
+        ? withEncryption(concurrentDriver, { key: encryptionKey })
+        : concurrentDriver;
     } else {
       const basicDriver = createFileDriver({ directory: DEMO_DIR });
       fileDriver = basicDriver;

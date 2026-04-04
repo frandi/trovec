@@ -150,6 +150,13 @@ export interface StorageDriver {
   exists(collectionId: string): Promise<boolean>;
   /** Delete stored data for the given collection ID. Returns `true` if data existed. */
   delete(collectionId: string): Promise<boolean>;
+  /**
+   * Optional hook for built-in drivers to handle encryption internally
+   * (e.g. to ensure correct compress-then-encrypt ordering or WAL encryption).
+   * When present, {@link withEncryption} delegates to this method instead of wrapping.
+   * Community drivers do NOT need to implement this — the wrapper handles encryption for them.
+   */
+  configureEncryption?(options: EncryptionOptions): void;
 }
 
 /** Configuration options for the file-based storage driver. */
@@ -227,11 +234,6 @@ export interface ConcurrentFileDriverOptions extends FileDriverOptions {
    * @defaultValue `true`
    */
   checkpointOnClose?: boolean;
-  /**
-   * Encryption options for encrypting data at rest.
-   * When set, both the base collection file and WAL entries are encrypted using AES-256-GCM.
-   */
-  encryption?: EncryptionOptions;
 }
 
 /** Concurrent file-based storage driver with file locking and optional WAL support. */

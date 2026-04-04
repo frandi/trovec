@@ -13,6 +13,7 @@ import type {
   WalOperation,
   EntryId,
   QuantizedVector,
+  EncryptionOptions,
 } from '../types.js';
 
 const DEFAULT_DIRECTORY = '.trovec';
@@ -66,23 +67,14 @@ export function createConcurrentFileDriver(
     lockAcquireTimeout = 10_000,
     lockRetryInterval = 200,
     wal: walEnabled = false,
-    encryption,
   } = options;
 
   const resolvedDir = resolve(directory);
   let dirEnsured = false;
 
-  // Resolve encryption at creation time (validates options eagerly)
-  const resolvedEncryption: ResolvedEncryption | null = encryption
-    ? resolveEncryptionKey(encryption)
-    : null;
-
-  const walTransforms: WalTransforms | undefined = resolvedEncryption
-    ? {
-        encrypt: (buf: Buffer) => encryptBuffer(buf, resolvedEncryption),
-        decrypt: (buf: Buffer) => decryptBuffer(buf, resolvedEncryption),
-      }
-    : undefined;
+  // Encryption state — configured via configureEncryption(), called by withEncryption()
+  let resolvedEncryption: ResolvedEncryption | null = null;
+  let walTransforms: WalTransforms | undefined;
 
   // Track WAL sequence numbers per collection
   const walSequences = new Map<string, number>();
@@ -174,6 +166,14 @@ export function createConcurrentFileDriver(
 
     get directory() {
       return resolvedDir;
+    },
+
+    configureEncryption(options: EncryptionOptions): void {
+      resolvedEncryption = resolveEncryptionKey(options);
+      walTransforms = {
+        encrypt: (buf: Buffer) => encryptBuffer(buf, resolvedEncryption!),
+        decrypt: (buf: Buffer) => decryptBuffer(buf, resolvedEncryption!),
+      };
     },
 
     async write(collectionId: string, data: Buffer): Promise<void> {

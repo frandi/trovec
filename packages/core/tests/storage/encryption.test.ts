@@ -144,7 +144,7 @@ describe('withEncryption wrapper', () => {
     expect(await driver.delete('col1')).toBe(false);
   });
 
-  it('is not WAL-aware', () => {
+  it('is not WAL-aware when wrapping a non-WAL driver', () => {
     const inner = createMemoryDriver();
     const driver = withEncryption(inner, { key: TEST_KEY });
     expect(isWalAwareDriver(driver)).toBe(false);
@@ -232,7 +232,7 @@ describe('withEncryption + file driver integration', () => {
   });
 });
 
-describe('concurrent driver with encryption', () => {
+describe('withEncryption + concurrent file driver integration', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -244,7 +244,7 @@ describe('concurrent driver with encryption', () => {
   });
 
   it('persist + restore with encryption (WAL disabled)', async () => {
-    const driver = createConcurrentFileDriver({ directory: dir, encryption: { key: TEST_KEY } });
+    const driver = withEncryption(createConcurrentFileDriver({ directory: dir }), { key: TEST_KEY });
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
 
     addMany(instance, [
@@ -260,7 +260,7 @@ describe('concurrent driver with encryption', () => {
   });
 
   it('raw file on disk is encrypted', async () => {
-    const driver = createConcurrentFileDriver({ directory: dir, encryption: { key: TEST_KEY } });
+    const driver = withEncryption(createConcurrentFileDriver({ directory: dir }), { key: TEST_KEY });
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
     add(instance, { id: 'a', embedding: [1, 2, 3] });
     await flush(instance);
@@ -270,11 +270,10 @@ describe('concurrent driver with encryption', () => {
   });
 
   it('persist + restore with encryption + WAL', async () => {
-    const driver = createConcurrentFileDriver({
+    const driver = withEncryption(createConcurrentFileDriver({
       directory: dir,
       wal: true,
-      encryption: { key: TEST_KEY },
-    });
+    }), { key: TEST_KEY });
 
     // First write — full write (WAL config not ready yet)
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
@@ -298,11 +297,10 @@ describe('concurrent driver with encryption', () => {
   });
 
   it('WAL file is encrypted (no plaintext magic)', async () => {
-    const driver = createConcurrentFileDriver({
+    const driver = withEncryption(createConcurrentFileDriver({
       directory: dir,
       wal: true,
-      encryption: { key: TEST_KEY },
-    });
+    }), { key: TEST_KEY });
 
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
     add(instance, { id: 'a', embedding: [1, 2, 3] });
@@ -322,42 +320,39 @@ describe('concurrent driver with encryption', () => {
   });
 
   it('wrong key on reopen throws EncryptionError', async () => {
-    const driver = createConcurrentFileDriver({ directory: dir, encryption: { key: TEST_KEY } });
+    const driver = withEncryption(createConcurrentFileDriver({ directory: dir }), { key: TEST_KEY });
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
     add(instance, { id: 'a', embedding: [1, 2, 3] });
     await flush(instance);
 
-    const wrongDriver = createConcurrentFileDriver({ directory: dir, encryption: { key: WRONG_KEY } });
+    const wrongDriver = withEncryption(createConcurrentFileDriver({ directory: dir }), { key: WRONG_KEY });
     await expect(create({ dimensions: 3, storageDriver: wrongDriver, collectionId: 'test', autoFlush: false }))
       .rejects.toThrow(EncryptionError);
   });
 
   it('encryption with password-based key derivation', async () => {
-    const driver = createConcurrentFileDriver({
+    const driver = withEncryption(createConcurrentFileDriver({
       directory: dir,
-      encryption: { password: 'my-secret', iterations: 1000 },
-    });
+    }), { password: 'my-secret', iterations: 1000 });
 
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
     add(instance, { id: 'a', embedding: [1, 2, 3] });
     await flush(instance);
 
-    const driver2 = createConcurrentFileDriver({
+    const driver2 = withEncryption(createConcurrentFileDriver({
       directory: dir,
-      encryption: { password: 'my-secret', iterations: 1000 },
-    });
+    }), { password: 'my-secret', iterations: 1000 });
     const instance2 = await create({ dimensions: 3, storageDriver: driver2, collectionId: 'test', autoFlush: false });
     expect(instance2.entries.size).toBe(1);
     expect(get(instance2, 'a')!.embedding).toEqual([1, 2, 3]);
   });
 
   it('checkpoint produces encrypted base file', async () => {
-    const driver = createConcurrentFileDriver({
+    const driver = withEncryption(createConcurrentFileDriver({
       directory: dir,
       wal: true,
       checkpointThreshold: 100,
-      encryption: { key: TEST_KEY },
-    });
+    }), { key: TEST_KEY });
 
     const instance = await create({ dimensions: 3, storageDriver: driver, collectionId: 'test', autoFlush: false });
     add(instance, { id: 'a', embedding: [1, 2, 3] });

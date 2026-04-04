@@ -146,7 +146,7 @@ describe('Encryption stress & benchmarks', () => {
         // --- Encrypted ---
         const encDir = await mkdtemp(join(tmpdir(), 'trovec-enc-aes-'));
 
-        const encDriver = createConcurrentFileDriver({ directory: encDir, encryption: { key: TEST_KEY } });
+        const encDriver = withEncryption(createConcurrentFileDriver({ directory: encDir }), { key: TEST_KEY });
         const encInst = await create({
           dimensions: dims, storageDriver: encDriver,
           collectionId: 'bench', autoFlush: false,
@@ -161,7 +161,7 @@ describe('Encryption stress & benchmarks', () => {
         const encFile = await stat(join(encDir, 'bench.trovec'));
 
         const { durationMs: encRead } = await measure(async () => {
-          const d = createConcurrentFileDriver({ directory: encDir, encryption: { key: TEST_KEY } });
+          const d = withEncryption(createConcurrentFileDriver({ directory: encDir }), { key: TEST_KEY });
           const i = await create({ dimensions: dims, storageDriver: d, collectionId: 'bench', autoFlush: false });
           expect((i as unknown as TrovecInstance).entries.size).toBe(entryCount);
         });
@@ -232,7 +232,7 @@ describe('Encryption stress & benchmarks', () => {
 
     // --- Encrypted WAL ---
     const encDir = await mkdtemp(join(tmpdir(), 'trovec-wal-enc-'));
-    const encDriver = createConcurrentFileDriver({ directory: encDir, wal: true, encryption: { key: TEST_KEY } });
+    const encDriver = withEncryption(createConcurrentFileDriver({ directory: encDir, wal: true }), { key: TEST_KEY });
     const encInst = await create({
       dimensions: dims, storageDriver: encDriver,
       collectionId: 'wal', autoFlush: false,
@@ -269,7 +269,7 @@ describe('Encryption stress & benchmarks', () => {
     console.log(`  Overhead: +${avgOverhead}% avg latency`);
 
     // Verify encrypted WAL data is correct
-    const verifyDriver = createConcurrentFileDriver({ directory: encDir, wal: true, encryption: { key: TEST_KEY } });
+    const verifyDriver = withEncryption(createConcurrentFileDriver({ directory: encDir, wal: true }), { key: TEST_KEY });
     const verifyInst = await create({ dimensions: dims, storageDriver: verifyDriver, collectionId: 'wal', autoFlush: false });
     expect((verifyInst as unknown as TrovecInstance).entries.size).toBe(totalAppends + 1);
 
@@ -309,14 +309,14 @@ describe('Encryption stress & benchmarks', () => {
         });
 
         // Encrypted
-        const encDriver = createConcurrentFileDriver({ directory: encDir, encryption: { key: TEST_KEY } });
+        const encDriver = withEncryption(createConcurrentFileDriver({ directory: encDir }), { key: TEST_KEY });
         const encInst = await create({ dimensions: dims, storageDriver: encDriver, collectionId: 'lv', autoFlush: false });
         addMany(encInst as unknown as TrovecInstance, entries);
         const { durationMs: encFlush } = await measure(async () => { await flush(encInst as unknown as TrovecInstance); });
         await close(encInst as unknown as TrovecInstance);
         const encFile = await stat(join(encDir, 'lv.trovec'));
         const { durationMs: encRead } = await measure(async () => {
-          const d = createConcurrentFileDriver({ directory: encDir, encryption: { key: TEST_KEY } });
+          const d = withEncryption(createConcurrentFileDriver({ directory: encDir }), { key: TEST_KEY });
           await create({ dimensions: dims, storageDriver: d, collectionId: 'lv', autoFlush: false });
         });
 
@@ -333,60 +333,60 @@ describe('Encryption stress & benchmarks', () => {
     }
   }, 120_000);
 
-  it('6.4 withEncryption wrapper vs concurrent driver built-in', async () => {
+  it('6.4 withEncryption: file driver vs concurrent driver', async () => {
     const dims = 128;
     const entryCount = 10_000;
 
-    console.log('\n6.4 Wrapper vs built-in encryption (10K x 128d):');
+    console.log('\n6.4 Encrypted file driver vs concurrent driver (10K x 128d):');
 
     const entries = Array.from({ length: entryCount }, (_, i) => ({
       id: `e-${i}`,
       embedding: randomEmbedding(dims),
     }));
 
-    // --- withEncryption wrapper ---
-    const wrapDir = await mkdtemp(join(tmpdir(), 'trovec-enc-wrap-'));
-    const wrapDriver = withEncryption(createFileDriver({ directory: wrapDir }), { key: TEST_KEY });
-    const wrapInst = await create({ dimensions: dims, storageDriver: wrapDriver, collectionId: 'bench', autoFlush: false });
-    addMany(wrapInst as unknown as TrovecInstance, entries);
-    const { durationMs: wrapFlush } = await measure(async () => {
-      await flush(wrapInst as unknown as TrovecInstance);
+    // --- File driver ---
+    const fileDir = await mkdtemp(join(tmpdir(), 'trovec-enc-file-'));
+    const fileDriverEnc = withEncryption(createFileDriver({ directory: fileDir }), { key: TEST_KEY });
+    const fileInst = await create({ dimensions: dims, storageDriver: fileDriverEnc, collectionId: 'bench', autoFlush: false });
+    addMany(fileInst as unknown as TrovecInstance, entries);
+    const { durationMs: fileFlush } = await measure(async () => {
+      await flush(fileInst as unknown as TrovecInstance);
     });
-    await close(wrapInst as unknown as TrovecInstance);
-    const wrapFile = await stat(join(wrapDir, 'bench.trovec'));
-    const { durationMs: wrapRead } = await measure(async () => {
-      const d = withEncryption(createFileDriver({ directory: wrapDir }), { key: TEST_KEY });
+    await close(fileInst as unknown as TrovecInstance);
+    const fileFile = await stat(join(fileDir, 'bench.trovec'));
+    const { durationMs: fileRead } = await measure(async () => {
+      const d = withEncryption(createFileDriver({ directory: fileDir }), { key: TEST_KEY });
       const i = await create({ dimensions: dims, storageDriver: d, collectionId: 'bench', autoFlush: false });
       expect((i as unknown as TrovecInstance).entries.size).toBe(entryCount);
     });
 
-    // --- Built-in on concurrent driver ---
-    const builtinDir = await mkdtemp(join(tmpdir(), 'trovec-enc-builtin-'));
-    const builtinDriver = createConcurrentFileDriver({ directory: builtinDir, encryption: { key: TEST_KEY } });
-    const builtinInst = await create({ dimensions: dims, storageDriver: builtinDriver, collectionId: 'bench', autoFlush: false });
-    addMany(builtinInst as unknown as TrovecInstance, entries);
-    const { durationMs: builtinFlush } = await measure(async () => {
-      await flush(builtinInst as unknown as TrovecInstance);
+    // --- Concurrent driver ---
+    const concDir = await mkdtemp(join(tmpdir(), 'trovec-enc-conc-'));
+    const concDriverEnc = withEncryption(createConcurrentFileDriver({ directory: concDir }), { key: TEST_KEY });
+    const concInst = await create({ dimensions: dims, storageDriver: concDriverEnc, collectionId: 'bench', autoFlush: false });
+    addMany(concInst as unknown as TrovecInstance, entries);
+    const { durationMs: concFlush } = await measure(async () => {
+      await flush(concInst as unknown as TrovecInstance);
     });
-    await close(builtinInst as unknown as TrovecInstance);
-    const builtinFile = await stat(join(builtinDir, 'bench.trovec'));
-    const { durationMs: builtinRead } = await measure(async () => {
-      const d = createConcurrentFileDriver({ directory: builtinDir, encryption: { key: TEST_KEY } });
+    await close(concInst as unknown as TrovecInstance);
+    const concFile = await stat(join(concDir, 'bench.trovec'));
+    const { durationMs: concRead } = await measure(async () => {
+      const d = withEncryption(createConcurrentFileDriver({ directory: concDir }), { key: TEST_KEY });
       const i = await create({ dimensions: dims, storageDriver: d, collectionId: 'bench', autoFlush: false });
       expect((i as unknown as TrovecInstance).entries.size).toBe(entryCount);
     });
 
-    console.log('  Method     |  Flush(ms)  |  Read(ms)  |  File size');
-    console.log('  -----------|-------------|------------|----------');
+    console.log('  Driver       |  Flush(ms)  |  Read(ms)  |  File size');
+    console.log('  -------------|-------------|------------|----------');
     console.log(
-      `  Wrapper    | ${wrapFlush.toFixed(0).padStart(9)} | ${wrapRead.toFixed(0).padStart(8)} | ${(wrapFile.size / 1024).toFixed(0).padStart(6)}KB`,
+      `  File         | ${fileFlush.toFixed(0).padStart(9)} | ${fileRead.toFixed(0).padStart(8)} | ${(fileFile.size / 1024).toFixed(0).padStart(6)}KB`,
     );
     console.log(
-      `  Built-in   | ${builtinFlush.toFixed(0).padStart(9)} | ${builtinRead.toFixed(0).padStart(8)} | ${(builtinFile.size / 1024).toFixed(0).padStart(6)}KB`,
+      `  Concurrent   | ${concFlush.toFixed(0).padStart(9)} | ${concRead.toFixed(0).padStart(8)} | ${(concFile.size / 1024).toFixed(0).padStart(6)}KB`,
     );
 
-    await rm(wrapDir, { recursive: true, force: true });
-    await rm(builtinDir, { recursive: true, force: true });
+    await rm(fileDir, { recursive: true, force: true });
+    await rm(concDir, { recursive: true, force: true });
   }, 60_000);
 
   it('6.5 encrypted concurrent multi-process writes (WAL)', async () => {
@@ -398,7 +398,7 @@ describe('Encryption stress & benchmarks', () => {
     console.log(`\n6.5 Encrypted multi-process WAL (${processCount} processes, ${opsPerWorker} ops each, ${dims}d):`);
 
     // Seed the collection
-    const driver = createConcurrentFileDriver({ directory: dir, wal: true, encryption: { key: TEST_KEY } });
+    const driver = withEncryption(createConcurrentFileDriver({ directory: dir, wal: true }), { key: TEST_KEY });
     const seedInst = await create({ dimensions: dims, storageDriver: driver, collectionId: 'mproc', autoFlush: false });
     add(seedInst as unknown as TrovecInstance, { id: 'seed', embedding: randomEmbedding(dims) });
     await flush(seedInst as unknown as TrovecInstance);
@@ -453,7 +453,7 @@ describe('Encryption stress & benchmarks', () => {
     console.log(`  Flush: avg=${flushStats.avg.toFixed(1)}ms p50=${flushStats.p50.toFixed(1)}ms p95=${flushStats.p95.toFixed(1)}ms p99=${flushStats.p99.toFixed(1)}ms max=${flushStats.max.toFixed(0)}ms`);
 
     // Verify all data
-    const verifyDriver = createConcurrentFileDriver({ directory: dir, wal: true, encryption: { key: TEST_KEY } });
+    const verifyDriver = withEncryption(createConcurrentFileDriver({ directory: dir, wal: true }), { key: TEST_KEY });
     const verifyInst = await create({ dimensions: dims, storageDriver: verifyDriver, collectionId: 'mproc', autoFlush: false });
     const verifyCount = (verifyInst as unknown as TrovecInstance).entries.size;
     console.log(`  Verified: ${verifyCount} entries (expected ${totalOps + 1})`);
