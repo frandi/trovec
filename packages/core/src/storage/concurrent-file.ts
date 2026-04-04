@@ -3,6 +3,9 @@ import { join, resolve } from 'node:path';
 import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib';
 import { acquireLock } from './lock.js';
 import { appendWalEntries, readWalEntries, replayWal, deleteWal } from './wal.js';
+import type { WalTransforms } from './wal.js';
+import { resolveEncryptionKey, encryptBuffer, decryptBuffer } from './encryption.js';
+import type { ResolvedEncryption } from './encryption.js';
 import type {
   ConcurrentFileDriverOptions,
   ConcurrentFileStorageDriver,
@@ -10,6 +13,7 @@ import type {
   WalOperation,
   EntryId,
   QuantizedVector,
+  EncryptionOptions,
 } from '../types.js';
 
 const DEFAULT_DIRECTORY = '.trovec';
@@ -68,6 +72,10 @@ export function createConcurrentFileDriver(
   const resolvedDir = resolve(directory);
   let dirEnsured = false;
 
+  // Encryption state — configured via configureEncryption(), called by withEncryption()
+  let resolvedEncryption: ResolvedEncryption | null = null;
+  let walTransforms: WalTransforms | undefined;
+
   // Track WAL sequence numbers per collection
   const walSequences = new Map<string, number>();
   const walEntryCounts = new Map<string, number>();
@@ -106,7 +114,10 @@ export function createConcurrentFileDriver(
 
   async function readBaseFile(collectionId: string): Promise<Buffer | null> {
     try {
-      const raw = await readFile(filePath(collectionId));
+      let raw: Buffer = await readFile(filePath(collectionId));
+      if (resolvedEncryption) {
+        raw = decryptBuffer(raw, resolvedEncryption);
+      }
       return decompress(raw);
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
@@ -118,8 +129,11 @@ export function createConcurrentFileDriver(
     await ensureDir();
     const target = filePath(collectionId);
     const tmp = `${target}.tmp`;
-    const compressed = compress(data);
-    await fsWriteFile(tmp, compressed);
+    let output = compress(data);
+    if (resolvedEncryption) {
+      output = encryptBuffer(output, resolvedEncryption);
+    }
+    await fsWriteFile(tmp, output);
     await rename(tmp, target);
   }
 
@@ -152,6 +166,14 @@ export function createConcurrentFileDriver(
 
     get directory() {
       return resolvedDir;
+    },
+
+    configureEncryption(options: EncryptionOptions): void {
+      resolvedEncryption = resolveEncryptionKey(options);
+      walTransforms = {
+        encrypt: (buf: Buffer) => encryptBuffer(buf, resolvedEncryption!),
+        decrypt: (buf: Buffer) => decryptBuffer(buf, resolvedEncryption!),
+      };
     },
 
     async write(collectionId: string, data: Buffer): Promise<void> {
@@ -188,7 +210,7 @@ export function createConcurrentFileDriver(
         if (!config) return baseData;
 
         // Read and replay WAL on top of base data
-        const walResult = await readWalEntries(walPath(collectionId), config);
+        const walResult = await readWalEntries(walPath(collectionId), config, walTransforms);
 
         if (walResult.entries.length === 0) {
           walSequences.set(collectionId, walResult.nextSequence);
@@ -275,7 +297,7 @@ export function createConcurrentFileDriver(
       const lock = await acquireLock(lockPath(collectionId), lockOpts);
       try {
         const seq = walSequences.get(collectionId) ?? 0;
-        const nextSeq = await appendWalEntries(walPath(collectionId), ops, seq, config);
+        const nextSeq = await appendWalEntries(walPath(collectionId), ops, seq, config, walTransforms);
         walSequences.set(collectionId, nextSeq);
 
         const count = (walEntryCounts.get(collectionId) ?? 0) + ops.length;

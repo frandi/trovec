@@ -150,6 +150,13 @@ export interface StorageDriver {
   exists(collectionId: string): Promise<boolean>;
   /** Delete stored data for the given collection ID. Returns `true` if data existed. */
   delete(collectionId: string): Promise<boolean>;
+  /**
+   * Optional hook for built-in drivers to handle encryption internally
+   * (e.g. to ensure correct compress-then-encrypt ordering or WAL encryption).
+   * When present, {@link withEncryption} delegates to this method instead of wrapping.
+   * Community drivers do NOT need to implement this — the wrapper handles encryption for them.
+   */
+  configureEncryption?(options: EncryptionOptions): void;
 }
 
 /** Configuration options for the file-based storage driver. */
@@ -177,6 +184,20 @@ export interface FileStorageDriver extends StorageDriver {
   readonly directory: string;
   /** Delete the entire storage directory and all collection files within it. */
   destroy(): Promise<void>;
+}
+
+/** Configuration options for encryption at rest. */
+export interface EncryptionOptions {
+  /** Raw 32-byte encryption key. Mutually exclusive with `password`. */
+  key?: Buffer;
+  /** Password for PBKDF2 key derivation. Mutually exclusive with `key`. */
+  password?: string;
+  /**
+   * Number of PBKDF2 iterations for password-based key derivation.
+   * Only used with `password`.
+   * @defaultValue `100_000`
+   */
+  iterations?: number;
 }
 
 /** Configuration options for the concurrent file-based storage driver. */

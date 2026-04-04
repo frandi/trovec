@@ -3,8 +3,10 @@ import {
   createMemoryDriver,
   createFileDriver,
   createConcurrentFileDriver,
+  withEncryption,
 } from '@trovec/core';
-import type { Embedder } from '@trovec/core';
+import type { Embedder, StorageDriver } from '@trovec/core';
+import { randomBytes } from 'node:crypto';
 import { stat, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -238,19 +240,48 @@ async function main() {
     useConcurrent = modeChoice === 1;
   }
 
+  // ── Prompt: Encryption ──────────────────────────────────────────────────────
+
+  let useEncryption = false;
+  let encryptionKey: Buffer | undefined;
+  if (usePersisted) {
+    const encChoice = await askChoice(rl, 'Encryption at rest:', ['No encryption', 'AES-256-GCM (random key)'], 0);
+    useEncryption = encChoice === 1;
+    if (useEncryption) {
+      encryptionKey = randomBytes(32);
+    }
+  }
+
   // ── Prompt: Reuse or start fresh (if persisted + data exists) ────────────────
 
   let reuseData = false;
-  let fileDriver = usePersisted
-    ? (useConcurrent
-      ? createConcurrentFileDriver({ directory: DEMO_DIR, wal: true })
-      : createFileDriver({ directory: DEMO_DIR }))
-    : null;
+  let fileDriver: (ReturnType<typeof createFileDriver> | ReturnType<typeof createConcurrentFileDriver>) | null = null;
+  let storageDriverForTrovec: StorageDriver | null = null;
+
+  if (usePersisted) {
+    if (useConcurrent) {
+      const concurrentDriver = createConcurrentFileDriver({
+        directory: DEMO_DIR,
+        wal: true,
+      });
+      fileDriver = concurrentDriver;
+      storageDriverForTrovec = useEncryption && encryptionKey
+        ? withEncryption(concurrentDriver, { key: encryptionKey })
+        : concurrentDriver;
+    } else {
+      const basicDriver = createFileDriver({ directory: DEMO_DIR });
+      fileDriver = basicDriver;
+      storageDriverForTrovec = useEncryption && encryptionKey
+        ? withEncryption(basicDriver, { key: encryptionKey })
+        : basicDriver;
+    }
+  }
 
   let embedder: Embedder;
   let embedderName: string;
 
-  if (fileDriver && await fileDriver.exists(COLLECTION_ID)) {
+  // When encryption is enabled with a fresh random key, we can't reuse existing data
+  if (fileDriver && !useEncryption && await fileDriver.exists(COLLECTION_ID)) {
     const existingBuffer = await fileDriver.read(COLLECTION_ID);
     const storedDims = existingBuffer!.readUInt32LE(5);
     const detected = detectEmbedderFromDimensions(storedDims);
@@ -276,7 +307,11 @@ async function main() {
       embedderName = resolved.name;
     }
   } else {
-    // ── Prompt: Embedder (in-memory or persisted with no existing data) ────────
+    // ── Prompt: Embedder (in-memory, encrypted, or persisted with no existing data) ──
+    if (useEncryption && fileDriver && await fileDriver.exists(COLLECTION_ID)) {
+      // Clean up any old unencrypted data
+      await fileDriver.delete(COLLECTION_ID);
+    }
     const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
     const resolved = await resolveEmbedder(embedderChoice, rl);
     embedder = resolved.embedder;
@@ -294,7 +329,7 @@ async function main() {
 
   nextStep('Initialize Trovec Instance');
 
-  const storageDriver = fileDriver ?? createMemoryDriver();
+  const storageDriver = storageDriverForTrovec ?? createMemoryDriver();
   const createStart = performance.now();
   let db = await create({
     quantization: 'F32',
@@ -309,9 +344,23 @@ async function main() {
   info('Dimensions', String(db.config.dimensions));
   info('Quantization', db.config.quantization);
   info('Metric', db.config.metric);
-  info('Storage', fileDriver
-    ? (useConcurrent ? `ConcurrentFileDriver + WAL (${DEMO_DIR}/)` : `FileDriver (${DEMO_DIR}/)`)
-    : 'MemoryDriver');
+
+  let storageLabel: string;
+  if (!fileDriver) {
+    storageLabel = 'MemoryDriver';
+  } else if (useConcurrent) {
+    storageLabel = `ConcurrentFileDriver + WAL (${DEMO_DIR}/)`;
+  } else {
+    storageLabel = `FileDriver (${DEMO_DIR}/)`;
+  }
+  info('Storage', storageLabel);
+
+  if (useEncryption) {
+    info('Encryption', `${c.green}AES-256-GCM${c.reset} ${c.dim}(256-bit key, per-file IV)${c.reset}`);
+    if (useConcurrent) {
+      info('WAL encryption', `${c.green}Enabled${c.reset} ${c.dim}(per-entry encryption)${c.reset}`);
+    }
+  }
   info('Collection ID', db.collectionId);
   success(`Instance created${c.dim} (${createElapsed}ms)${c.reset}`);
 
@@ -374,13 +423,17 @@ async function main() {
 
     const workerPromises = Array.from({ length: WORKER_COUNT }, (_, i) => {
       return new Promise<{ workerIndex: number; entryCount: number; elapsed: string }>((res, rej) => {
-        execFile('npx', [
+        const workerArgs = [
           'tsx', workerScript,
           resolve(DEMO_DIR), COLLECTION_ID,
           String(i + 1),
           String(db.config.dimensions),
           String(ENTRIES_PER_WORKER),
-        ], { timeout: 60_000, shell: true }, (err, stdoutData, stderrData) => {
+        ];
+        if (encryptionKey) {
+          workerArgs.push(encryptionKey.toString('hex'));
+        }
+        execFile('npx', workerArgs, { timeout: 60_000, shell: true }, (err, stdoutData, stderrData) => {
           if (err) {
             rej(new Error(`Worker ${i + 1} failed: ${stderrData || err.message}`));
             return;
@@ -413,7 +466,7 @@ async function main() {
       quantization: 'F32',
       metric: 'cosine',
       embedder,
-      storageDriver: fileDriver ?? createMemoryDriver(),
+      storageDriver: storageDriverForTrovec ?? createMemoryDriver(),
       collectionId: COLLECTION_ID,
     });
 
@@ -505,6 +558,39 @@ async function main() {
     info('Compression', 'Brotli (quality 1)');
     info('Raw size', `${rawSize} bytes`);
     info('File size', `${fileSize} bytes (${ratio}% smaller)`);
+
+    if (useEncryption) {
+      console.log();
+      info('Encryption', `${c.green}AES-256-GCM${c.reset}`);
+      info('Encryption overhead', `46 bytes ${c.dim}(header: version + mode + salt + IV + auth tag)${c.reset}`);
+
+      // Show that file is opaque
+      const rawFileBytes = await readFile(join(fileDriver.directory, `${db.collectionId}.trovec`));
+      const containsMagic = rawFileBytes.includes(Buffer.from('VCR\x01'));
+      if (!containsMagic) {
+        success(`File on disk is fully encrypted — no plaintext headers or data detected`);
+      }
+
+      // Show encrypted vs unencrypted file size comparison
+      const unencryptedDriver = useConcurrent
+        ? createConcurrentFileDriver({ directory: join(DEMO_DIR, '__enc_compare__'), wal: false })
+        : createFileDriver({ directory: join(DEMO_DIR, '__enc_compare__') });
+      const dbCompare = await create({
+        dimensions: db.config.dimensions, quantization: 'F32', metric: 'cosine',
+        storageDriver: unencryptedDriver, collectionId: 'cmp', autoFlush: false,
+      });
+      for (const doc of DOCUMENTS) {
+        const entry = db.get(doc.id);
+        if (entry) dbCompare.add(entry);
+      }
+      await dbCompare.flush();
+      const unencStat = await stat(join(unencryptedDriver.directory, 'cmp.trovec'));
+      const overhead = fileSize - unencStat.size;
+      const overheadPct = unencStat.size > 0 ? ((overhead / unencStat.size) * 100).toFixed(2) : '0';
+      info('Unencrypted file', `${unencStat.size} bytes`);
+      info('Encrypted file', `${fileSize} bytes ${c.dim}(+${overhead} bytes / +${overheadPct}% overhead)${c.reset}`);
+      await unencryptedDriver.destroy();
+    }
   }
 
   // ── Step: Final Stats ───────────────────────────────────────────────────────
@@ -517,6 +603,7 @@ async function main() {
   info('Quantization', finalStats.quantization);
   info('Metric', finalStats.metric);
   info('Index', finalStats.indexStatus);
+  info('Encryption', useEncryption ? `${c.green}AES-256-GCM (enabled)${c.reset}` : `${c.dim}None${c.reset}`);
 
   // ── Done ────────────────────────────────────────────────────────────────────
 

@@ -1,7 +1,9 @@
 import { writeFile, readFile, access, unlink, rename, mkdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib';
-import type { FileStorageDriver, FileDriverOptions } from '../types.js';
+import { resolveEncryptionKey, encryptBuffer, decryptBuffer } from './encryption.js';
+import type { ResolvedEncryption } from './encryption.js';
+import type { FileStorageDriver, FileDriverOptions, EncryptionOptions } from '../types.js';
 
 const DEFAULT_DIRECTORY = '.trovec';
 
@@ -25,6 +27,7 @@ export function createFileDriver(options: FileDriverOptions = {}): FileStorageDr
   const resolvedDir = resolve(directory);
 
   let dirEnsured = false;
+  let resolvedEncryption: ResolvedEncryption | null = null;
 
   async function ensureDir(): Promise<void> {
     if (dirEnsured) return;
@@ -55,18 +58,28 @@ export function createFileDriver(options: FileDriverOptions = {}): FileStorageDr
       return resolvedDir;
     },
 
+    configureEncryption(options: EncryptionOptions): void {
+      resolvedEncryption = resolveEncryptionKey(options);
+    },
+
     async write(collectionId: string, data: Buffer): Promise<void> {
       await ensureDir();
       const target = filePath(collectionId);
       const tmp = `${target}.tmp`;
-      const compressed = compress(data);
-      await writeFile(tmp, compressed);
+      let output = compress(data);
+      if (resolvedEncryption) {
+        output = encryptBuffer(output, resolvedEncryption);
+      }
+      await writeFile(tmp, output);
       await rename(tmp, target);
     },
 
     async read(collectionId: string): Promise<Buffer | null> {
       try {
-        const raw = await readFile(filePath(collectionId));
+        let raw: Buffer = await readFile(filePath(collectionId));
+        if (resolvedEncryption) {
+          raw = decryptBuffer(raw, resolvedEncryption);
+        }
         return decompress(raw);
       } catch (err: unknown) {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
