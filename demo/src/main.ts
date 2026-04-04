@@ -118,19 +118,31 @@ const DIMENSIONS_OLLAMA = 768;
 
 const ENV_FILE = join(DEMO_DIR, '.env');
 
-async function loadEnvApiKey(): Promise<string | undefined> {
+async function loadEnvValue(key: string): Promise<string | undefined> {
   try {
     const content = await readFile(ENV_FILE, 'utf-8');
-    const match = content.match(/^OPENAI_API_KEY=(.+)$/m);
+    const match = content.match(new RegExp(`^${key}=(.+)$`, 'm'));
     return match?.[1]?.trim() || undefined;
   } catch {
     return undefined;
   }
 }
 
-async function saveEnvApiKey(apiKey: string): Promise<void> {
+async function saveEnvValue(key: string, value: string): Promise<void> {
   await mkdir(DEMO_DIR, { recursive: true });
-  await writeFile(ENV_FILE, `OPENAI_API_KEY=${apiKey}\n`, 'utf-8');
+  let content = '';
+  try {
+    content = await readFile(ENV_FILE, 'utf-8');
+  } catch {
+    // file doesn't exist yet
+  }
+  const regex = new RegExp(`^${key}=.*$`, 'm');
+  if (regex.test(content)) {
+    content = content.replace(regex, `${key}=${value}`);
+  } else {
+    content = content.trimEnd() + (content.length > 0 ? '\n' : '') + `${key}=${value}\n`;
+  }
+  await writeFile(ENV_FILE, content, 'utf-8');
 }
 
 async function askMaskedInput(
@@ -151,7 +163,7 @@ async function askMaskedInput(
 
 async function resolveOpenAIKey(rl: ReturnType<typeof createInterface>): Promise<string> {
   // Check .trovec/.env first, then process.env
-  const envKey = await loadEnvApiKey();
+  const envKey = await loadEnvValue('OPENAI_API_KEY');
   if (envKey) {
     bullet(`API key loaded from ${ENV_FILE}`);
     return envKey;
@@ -172,7 +184,7 @@ async function resolveOpenAIKey(rl: ReturnType<typeof createInterface>): Promise
     throw new Error('OpenAI API key is required.');
   }
 
-  await saveEnvApiKey(apiKey);
+  await saveEnvValue('OPENAI_API_KEY', apiKey);
   success(`API key saved to ${ENV_FILE}`);
   return apiKey;
 }
@@ -245,10 +257,18 @@ async function main() {
   let useEncryption = false;
   let encryptionKey: Buffer | undefined;
   if (usePersisted) {
-    const encChoice = await askChoice(rl, 'Encryption at rest:', ['No encryption', 'AES-256-GCM (random key)'], 0);
+    const encChoice = await askChoice(rl, 'Encryption at rest:', ['No encryption', 'AES-256-GCM'], 0);
     useEncryption = encChoice === 1;
     if (useEncryption) {
-      encryptionKey = randomBytes(32);
+      const savedHex = await loadEnvValue('TROVEC_ENCRYPTION_KEY');
+      if (savedHex && savedHex.length === 64) {
+        encryptionKey = Buffer.from(savedHex, 'hex');
+        bullet(`Encryption key loaded from ${ENV_FILE}`);
+      } else {
+        encryptionKey = randomBytes(32);
+        await saveEnvValue('TROVEC_ENCRYPTION_KEY', encryptionKey.toString('hex'));
+        success(`New encryption key generated and saved to ${ENV_FILE}`);
+      }
     }
   }
 
@@ -280,26 +300,46 @@ async function main() {
   let embedder: Embedder;
   let embedderName: string;
 
-  // When encryption is enabled with a fresh random key, we can't reuse existing data
-  if (fileDriver && !useEncryption && await fileDriver.exists(COLLECTION_ID)) {
-    const existingBuffer = await fileDriver.read(COLLECTION_ID);
-    const storedDims = existingBuffer!.readUInt32LE(5);
-    const detected = detectEmbedderFromDimensions(storedDims);
-    const detectedLabel = detectEmbedderFromDimensions(storedDims).label;
+  // Check for existing data — use the decryption-capable driver to read dimensions
+  const readDriver = storageDriverForTrovec ?? fileDriver;
+  if (fileDriver && readDriver && await fileDriver.exists(COLLECTION_ID)) {
+    let canReuse = true;
+    let storedDims = 0;
 
-    const reuseChoice = await askChoice(
-      rl,
-      `Existing data found (embedder: ${detectedLabel}, ${storedDims} dims):`,
-      ['Continue with existing data', 'Start fresh'],
-      0,
-    );
+    try {
+      const existingBuffer = await readDriver.read(COLLECTION_ID);
+      storedDims = existingBuffer!.readUInt32LE(5);
+    } catch {
+      // Can't read existing data (e.g. encrypted with a different key) — start fresh
+      canReuse = false;
+    }
 
-    if (reuseChoice === 0) {
-      reuseData = true;
-      const detectedResolved = await resolveEmbedder(detected.choice, rl, storedDims);
-      embedder = detectedResolved.embedder;
-      embedderName = detectedResolved.name;
+    if (canReuse && storedDims > 0) {
+      const detected = detectEmbedderFromDimensions(storedDims);
+      const detectedLabel = detected.label;
+      const encLabel = useEncryption ? ', encrypted' : '';
+
+      const reuseChoice = await askChoice(
+        rl,
+        `Existing data found (embedder: ${detectedLabel}, ${storedDims} dims${encLabel}):`,
+        ['Continue with existing data', 'Start fresh'],
+        0,
+      );
+
+      if (reuseChoice === 0) {
+        reuseData = true;
+        const detectedResolved = await resolveEmbedder(detected.choice, rl, storedDims);
+        embedder = detectedResolved.embedder;
+        embedderName = detectedResolved.name;
+      } else {
+        await fileDriver.delete(COLLECTION_ID);
+        const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
+        const resolved = await resolveEmbedder(embedderChoice, rl);
+        embedder = resolved.embedder;
+        embedderName = resolved.name;
+      }
     } else {
+      // Existing file is unreadable — delete and start fresh
       await fileDriver.delete(COLLECTION_ID);
       const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
       const resolved = await resolveEmbedder(embedderChoice, rl);
@@ -307,11 +347,6 @@ async function main() {
       embedderName = resolved.name;
     }
   } else {
-    // ── Prompt: Embedder (in-memory, encrypted, or persisted with no existing data) ──
-    if (useEncryption && fileDriver && await fileDriver.exists(COLLECTION_ID)) {
-      // Clean up any old unencrypted data
-      await fileDriver.delete(COLLECTION_ID);
-    }
     const embedderChoice = await askChoice(rl, 'Embedder:', ['Local (no setup needed)', 'OpenAI (requires API key)', 'Ollama (requires running server)'], 0);
     const resolved = await resolveEmbedder(embedderChoice, rl);
     embedder = resolved.embedder;
