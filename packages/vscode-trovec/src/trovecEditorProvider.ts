@@ -1,6 +1,17 @@
 import * as vscode from 'vscode';
 import { parse, type ParsedTrovec, type TrovecEntry } from './trovecParser';
 import { runQuery } from './queryEngine';
+import {
+  detectEncryption,
+  decryptBuffer,
+  resolvePassword,
+  resolveRawKey,
+  type ResolvedKey,
+  type KeyMode,
+} from './trovecDecryptor';
+
+/** Per-file cache so we don't re-prompt on every reload. */
+const keyCache = new Map<string, ResolvedKey>();
 
 export class TrovecEditorProvider implements vscode.CustomReadonlyEditorProvider<vscode.CustomDocument> {
   public static readonly viewType = 'trovec.viewer';
@@ -25,30 +36,103 @@ export class TrovecEditorProvider implements vscode.CustomReadonlyEditorProvider
   ): Promise<void> {
     webviewPanel.webview.options = { enableScripts: true };
 
-    // Parse the file
-    let parsed: ParsedTrovec;
-    try {
-      const raw = await vscode.workspace.fs.readFile(document.uri);
-      parsed = parse(Buffer.from(raw));
-    } catch (err: unknown) {
-      webviewPanel.webview.html = this.getErrorHtml((err as Error).message);
-      return;
-    }
+    const fileKey = document.uri.toString();
 
-    // Set HTML
-    webviewPanel.webview.html = this.getHtml(webviewPanel.webview, parsed);
+    const loadAndRender = async (promptIfEncrypted: boolean): Promise<void> => {
+      let raw: Buffer;
+      try {
+        raw = Buffer.from(await vscode.workspace.fs.readFile(document.uri));
+      } catch (err: unknown) {
+        webviewPanel.webview.html = this.getErrorHtml((err as Error).message);
+        return;
+      }
 
-    // Send context field paths for autocomplete
-    const fieldPaths = extractFieldPaths(parsed.entries);
-    webviewPanel.webview.postMessage({ type: 'fieldPaths', paths: fieldPaths });
+      const encInfo = detectEncryption(raw);
+
+      if (encInfo) {
+        // Encrypted file — resolve key (from cache or prompt)
+        let resolved = keyCache.get(fileKey);
+
+        if (!resolved && promptIfEncrypted) {
+          resolved = await this.promptForKey(encInfo.mode);
+          if (!resolved) {
+            // User cancelled — show informational page
+            webviewPanel.webview.html = this.getEncryptedHtml();
+            return;
+          }
+        }
+
+        if (!resolved) {
+          // No cached key and not prompting (e.g. during reload) — show encrypted page
+          webviewPanel.webview.html = this.getEncryptedHtml();
+          return;
+        }
+
+        try {
+          raw = decryptBuffer(raw, resolved);
+          keyCache.set(fileKey, resolved);
+        } catch (err: unknown) {
+          // Wrong password / key — clear cache and show error
+          keyCache.delete(fileKey);
+          webviewPanel.webview.html = this.getDecryptionErrorHtml((err as Error).message);
+          return;
+        }
+      }
+
+      // Parse the (now plaintext) buffer
+      let parsed: ParsedTrovec;
+      try {
+        parsed = parse(raw);
+      } catch (err: unknown) {
+        webviewPanel.webview.html = this.getErrorHtml((err as Error).message);
+        return;
+      }
+
+      webviewPanel.webview.html = this.getHtml(webviewPanel.webview, parsed);
+
+      const fieldPaths = extractFieldPaths(parsed.entries);
+      webviewPanel.webview.postMessage({ type: 'fieldPaths', paths: fieldPaths });
+    };
 
     // Handle messages from webview
-    webviewPanel.webview.onDidReceiveMessage((msg) => {
+    webviewPanel.webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === 'query') {
-        const result = runQuery(msg.query, parsed.entries, parsed.header);
-        webviewPanel.webview.postMessage({ type: 'result', result });
+        // Re-read & parse for query execution
+        let raw: Buffer;
+        try {
+          raw = Buffer.from(await vscode.workspace.fs.readFile(document.uri));
+        } catch {
+          return;
+        }
+
+        const encInfo = detectEncryption(raw);
+        if (encInfo) {
+          const resolved = keyCache.get(fileKey);
+          if (!resolved) return;
+          try {
+            raw = decryptBuffer(raw, resolved);
+          } catch {
+            return;
+          }
+        }
+
+        try {
+          const parsed = parse(raw);
+          const result = runQuery(msg.query, parsed.entries, parsed.header);
+          webviewPanel.webview.postMessage({ type: 'result', result });
+        } catch {
+          // ignore query errors on stale data
+        }
+      } else if (msg.type === 'retry-password') {
+        keyCache.delete(fileKey);
+        await loadAndRender(true);
+      } else if (msg.type === 'unlock') {
+        await loadAndRender(true);
       }
     });
+
+    // Initial load — prompt for password if encrypted
+    await loadAndRender(true);
 
     // Watch for file changes
     const watcher = vscode.workspace.createFileSystemWatcher(
@@ -56,19 +140,46 @@ export class TrovecEditorProvider implements vscode.CustomReadonlyEditorProvider
     );
 
     const reload = async () => {
-      try {
-        const raw = await vscode.workspace.fs.readFile(document.uri);
-        parsed = parse(Buffer.from(raw));
-        webviewPanel.webview.html = this.getHtml(webviewPanel.webview, parsed);
-        const newFieldPaths = extractFieldPaths(parsed.entries);
-        webviewPanel.webview.postMessage({ type: 'fieldPaths', paths: newFieldPaths });
-      } catch {
-        // Ignore reload errors (file may be mid-write)
-      }
+      // Silent reload — only use cached key, don't prompt
+      await loadAndRender(false);
     };
 
     watcher.onDidChange(reload);
-    webviewPanel.onDidDispose(() => watcher.dispose());
+    webviewPanel.onDidDispose(() => {
+      watcher.dispose();
+      keyCache.delete(fileKey);
+    });
+  }
+
+  /**
+   * Prompt the user for a decryption password or hex key.
+   */
+  private async promptForKey(mode: KeyMode): Promise<ResolvedKey | undefined> {
+    if (mode === 'password') {
+      const password = await vscode.window.showInputBox({
+        prompt: 'This .trovec file is encrypted. Enter the password to decrypt it.',
+        placeHolder: 'Password',
+        password: true,
+        ignoreFocusOut: true,
+      });
+      if (!password) return undefined;
+      return resolvePassword(password);
+    }
+
+    // Raw key mode
+    const hexKey = await vscode.window.showInputBox({
+      prompt: 'This .trovec file is encrypted with a raw key. Enter the 256-bit key as hex.',
+      placeHolder: '64 hex characters (256-bit key)',
+      ignoreFocusOut: true,
+      validateInput(value) {
+        if (!/^[0-9a-fA-F]{64}$/.test(value)) {
+          return 'Key must be exactly 64 hex characters (256-bit)';
+        }
+        return undefined;
+      },
+    });
+    if (!hexKey) return undefined;
+    return resolveRawKey(hexKey);
   }
 
   private getHtml(webview: vscode.Webview, parsed: ParsedTrovec): string {
@@ -143,6 +254,52 @@ export class TrovecEditorProvider implements vscode.CustomReadonlyEditorProvider
 <body style="padding:20px; font-family:sans-serif; color:var(--vscode-errorForeground,#f44);">
   <h2>Failed to parse .trovec file</h2>
   <pre>${escapeHtml(message)}</pre>
+</body>
+</html>`;
+  }
+
+  private getEncryptedHtml(): string {
+    const nonce = getNonce();
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><title>Encrypted</title>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'nonce-${nonce}';">
+</head>
+<body style="padding:40px; font-family:sans-serif; text-align:center; color:var(--vscode-foreground,#ccc);">
+  <h2>This file is encrypted</h2>
+  <p>Enter the decryption password to view this collection.</p>
+  <button id="btn-unlock" style="margin-top:12px; padding:8px 20px; cursor:pointer;">Unlock</button>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    document.getElementById('btn-unlock').addEventListener('click', () => {
+      vscode.postMessage({ type: 'unlock' });
+    });
+  </script>
+</body>
+</html>`;
+  }
+
+  private getDecryptionErrorHtml(message: string): string {
+    const nonce = getNonce();
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><title>Decryption Failed</title>
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'nonce-${nonce}';">
+</head>
+<body style="padding:40px; font-family:sans-serif; text-align:center; color:var(--vscode-foreground,#ccc);">
+  <h2 style="color:var(--vscode-errorForeground,#f44);">Decryption failed</h2>
+  <pre style="margin:12px 0;">${escapeHtml(message)}</pre>
+  <button id="btn-retry" style="margin-top:12px; padding:8px 20px; cursor:pointer;">Try Again</button>
+  <script nonce="${nonce}">
+    const vscode = acquireVsCodeApi();
+    document.getElementById('btn-retry').addEventListener('click', () => {
+      vscode.postMessage({ type: 'retry-password' });
+    });
+  </script>
 </body>
 </html>`;
   }
