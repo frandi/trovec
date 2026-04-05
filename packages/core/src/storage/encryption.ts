@@ -110,6 +110,19 @@ export function decryptBuffer(encrypted: Buffer, resolved: ResolvedEncryption): 
   let offset = 0;
   const version = encrypted.readUInt8(offset); offset += 1;
   if (version !== FORMAT_VERSION) {
+    // The first byte of an unencrypted Trovec base file is 'V' (0x56, first byte
+    // of the "VCR\x01" magic). If we see that here, the caller almost certainly
+    // pointed an encryption-enabled driver at a plaintext collection — which
+    // happens when an existing v2.1.0 deployment enables encryption without
+    // migrating first. Point them at the migration tool.
+    if (version === 0x56 /* 'V' */) {
+      throw new EncryptionError(
+        'Source buffer appears to be an unencrypted Trovec file. ' +
+        'To enable encryption on an existing collection, migrate it first — ' +
+        'e.g. `trovec migrate --source <plaintext-dir> --dest <encrypted-dir> --new-key <hex>` ' +
+        'or call `migrateCollection()` from @trovec/core.',
+      );
+    }
     throw new EncryptionError(`Unsupported encryption format version: ${version}`);
   }
 

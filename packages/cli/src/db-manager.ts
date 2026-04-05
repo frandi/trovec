@@ -54,6 +54,45 @@ export async function openDb(flags: CliFlags): Promise<Trovec> {
   return create(config);
 }
 
+/**
+ * Resolve destination encryption for `trovec migrate`. Parses `--new-key`,
+ * `--new-password`, and `--remove-encryption` with mutual-exclusivity checks.
+ * Returns `undefined` when the destination should be plaintext (either no flag
+ * given or `--remove-encryption` passed explicitly).
+ */
+export function resolveDestEncryptionFlags(flags: CliFlags): EncryptionOptions | undefined {
+  const hexKey = flags['new-key'] as string | undefined;
+  const password = flags['new-password'] as string | undefined;
+  const remove = flags['remove-encryption'] === true;
+
+  const provided = [hexKey, password, remove ? 'remove' : undefined].filter(Boolean).length;
+  if (provided > 1) {
+    throw new CliError(
+      'Cannot combine --new-key, --new-password, and --remove-encryption.',
+      'Provide exactly one.',
+    );
+  }
+
+  if (remove) return undefined;
+
+  if (hexKey) {
+    const buf = Buffer.from(hexKey, 'hex');
+    if (buf.length !== 32) {
+      throw new CliError(
+        `--new-key must be exactly 32 bytes (64 hex characters), got ${buf.length} bytes.`,
+        'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
+      );
+    }
+    return { key: buf };
+  }
+
+  if (password) {
+    return { password };
+  }
+
+  return undefined;
+}
+
 export function resolveEncryptionFlags(config: MergedConfig): EncryptionOptions | undefined {
   const hexKey = config.encryptionKey;
   const password = config.encryptionPassword;
