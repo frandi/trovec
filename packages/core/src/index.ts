@@ -45,4 +45,7 @@ export { createConcurrentFileDriver } from './storage/concurrent-file.js';
 export { withEncryption, decryptBuffer, resolveEncryptionKey } from './storage/encryption.js';
 export type { ResolvedEncryption } from './storage/encryption.js';
 
+export { migrateCollection } from './storage/migrate.js';
+export type { MigrateCollectionOptions, MigrationResult } from './storage/migrate.js';
+
 export { serialize, deserialize } from './serialization.js';

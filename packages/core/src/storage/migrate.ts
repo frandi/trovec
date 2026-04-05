@@ -1,0 +1,300 @@
+import { stat, access, unlink } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { createConcurrentFileDriver } from './concurrent-file.js';
+import { withEncryption } from './encryption.js';
+import { readWalEntries } from './wal.js';
+import { EncryptionError, InvalidConfigError } from '../errors.js';
+import type { EncryptionOptions, QuantizationType } from '../types.js';
+
+/**
+ * Options for {@link migrateCollection}.
+ */
+export interface MigrateCollectionOptions {
+  /** Directory containing the source `<collectionId>.trovec` file. */
+  sourceDirectory: string;
+  /** Directory to write the migrated `<collectionId>.trovec` file into. Created if missing. */
+  destDirectory: string;
+  /** Collection ID (i.e. the base filename without the `.trovec` suffix). */
+  collectionId: string;
+  /**
+   * Collection ID for the destination file. Omit to reuse `collectionId`.
+   * Use this when the destination is written into the **same** directory as
+   * the source — e.g. migrating `data.trovec` → `data-enc.trovec` in place.
+   */
+  destCollectionId?: string;
+  /**
+   * Encryption options used to read the source. Omit when the source is plaintext.
+   */
+  sourceEncryption?: EncryptionOptions;
+  /**
+   * Encryption options used when writing the destination. Omit to write plaintext.
+   */
+  destEncryption?: EncryptionOptions;
+  /**
+   * Overwrite the destination collection file if it already exists.
+   * @defaultValue `false`
+   */
+  force?: boolean;
+  /**
+   * Round-trip verify the destination by reading it back and comparing the
+   * decrypted plaintext byte-for-byte to the source plaintext.
+   * @defaultValue `true`
+   */
+  verify?: boolean;
+}
+
+/**
+ * Result returned by {@link migrateCollection}.
+ */
+export interface MigrationResult {
+  /** Number of entries in the migrated collection (base + replayed WAL). */
+  entryCount: number;
+  /** Size of the source `.trovec` file on disk, in bytes. */
+  sourceFileBytes: number;
+  /** Size of the destination `.trovec` file on disk, in bytes. */
+  destFileBytes: number;
+  /** `true` if the source had a `.trovec.wal` sidecar whose entries were checkpointed into the dest. */
+  walCheckpointed: boolean;
+}
+
+function sourceFilePath(dir: string, collectionId: string): string {
+  return join(resolve(dir), `${collectionId}.trovec`);
+}
+
+function walFilePath(dir: string, collectionId: string): string {
+  return join(resolve(dir), `${collectionId}.trovec.wal`);
+}
+
+function lockFilePath(dir: string, collectionId: string): string {
+  return join(resolve(dir), `${collectionId}.trovec.lock`);
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Parse the entry count field (uint32 LE at offset 11) from a plaintext Trovec buffer.
+ * See `packages/core/src/serialization.ts` for the full header layout.
+ */
+function readEntryCount(buffer: Buffer): number {
+  if (buffer.length < 16) return 0;
+  return buffer.readUInt32LE(11);
+}
+
+function readConfigFromHeader(buffer: Buffer): { dimensions: number; quantization: QuantizationType } | null {
+  if (buffer.length < 16) return null;
+  const QUANT_REVERSE: QuantizationType[] = ['F32', 'INT8', 'BIT'];
+  return {
+    dimensions: buffer.readUInt32LE(5),
+    quantization: QUANT_REVERSE[buffer.readUInt8(9)],
+  };
+}
+
+/**
+ * Non-destructively migrate a Trovec collection to a new directory, optionally
+ * adding, removing, or rotating encryption at rest.
+ *
+ * The migration is a driver-level buffer copy:
+ *
+ *   1. Open the source with a `createConcurrentFileDriver` (WAL-aware) and the
+ *      source encryption key (if any). Call `.read()` to obtain the fully
+ *      checkpointed plaintext buffer — this transparently replays any pending
+ *      WAL entries and decrypts them.
+ *   2. Open the destination with a fresh `createConcurrentFileDriver` (no WAL)
+ *      and the destination encryption key (if any). Call `.write()` to persist
+ *      the plaintext buffer, letting the driver handle compression and
+ *      encryption.
+ *   3. If `verify` is enabled (the default), re-read the destination and
+ *      compare the round-tripped plaintext to the source plaintext byte-for-byte.
+ *
+ * The source directory is not mutated: its base file, WAL sidecar, and
+ * configuration remain untouched. (Transient `.lock` files may be created by
+ * the concurrent driver during reads, but they are cleaned up before this
+ * function returns.)
+ *
+ * ### Safety checks
+ * - Refuses to run if a `.lock` file is present in the source (likely another
+ *   writer is still attached to the collection).
+ * - Refuses to overwrite an existing destination file unless `force` is set.
+ * - Refuses the trivial plain→plain case (both encryption options undefined).
+ *   Use `cp` for that.
+ *
+ * ### What this function does NOT do
+ * - Does not touch adjacent files (application-specific registries, uploads,
+ *   etc.). The caller is responsible for copying those across.
+ * - Does not archive or delete the source directory. Callers should archive
+ *   the source themselves after verifying the migration.
+ * - Does not acquire a write lock on the source. The caller is expected to
+ *   stop any writers before migrating; the `.lock` file pre-check catches the
+ *   common mistake of forgetting to do so.
+ *
+ * @example
+ * ```ts
+ * // Enable encryption on an existing plaintext collection.
+ * await migrateCollection({
+ *   sourceDirectory: './.trovec',
+ *   destDirectory: './.trovec-encrypted',
+ *   collectionId: 'default',
+ *   destEncryption: { key: Buffer.from(process.env.TROVEC_ENCRYPTION_KEY!, 'hex') },
+ * });
+ * ```
+ */
+export async function migrateCollection(
+  options: MigrateCollectionOptions,
+): Promise<MigrationResult> {
+  const {
+    sourceDirectory,
+    destDirectory,
+    collectionId,
+    destCollectionId,
+    sourceEncryption,
+    destEncryption,
+    force = false,
+    verify = true,
+  } = options;
+
+  if (!sourceEncryption && !destEncryption) {
+    throw new InvalidConfigError(
+      'Migration requires a change in encryption state (add, remove, or rotate). ' +
+      'For a plain-to-plain copy, use filesystem tools (e.g. cp -r).',
+    );
+  }
+
+  const destId = destCollectionId ?? collectionId;
+
+  const sourcePath = sourceFilePath(sourceDirectory, collectionId);
+  const destPath = sourceFilePath(destDirectory, destId);
+  const sourceLockPath = lockFilePath(sourceDirectory, collectionId);
+  const sourceWalPath = walFilePath(sourceDirectory, collectionId);
+
+  // Refuse in-place migration onto the source file itself.
+  if (resolve(sourcePath) === resolve(destPath)) {
+    throw new InvalidConfigError(
+      `Destination resolves to the source file (${sourcePath}). ` +
+      `Use a different directory or pass destCollectionId to write a new file alongside the source.`,
+    );
+  }
+
+  // Pre-flight: source file must exist.
+  let sourceStat;
+  try {
+    sourceStat = await stat(sourcePath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new InvalidConfigError(
+        `Source collection file not found: ${sourcePath}. ` +
+        `Check --source and --collection-id.`,
+      );
+    }
+    throw err;
+  }
+
+  // Pre-flight: refuse if a writer appears to be active on the source.
+  if (await exists(sourceLockPath)) {
+    throw new InvalidConfigError(
+      `Source collection appears to be in use by another process (found lock file: ${sourceLockPath}). ` +
+      `Stop the writer before migrating.`,
+    );
+  }
+
+  // Pre-flight: refuse to clobber an existing destination file unless forced.
+  if (await exists(destPath) && !force) {
+    throw new InvalidConfigError(
+      `Destination file already exists: ${destPath}. Pass force=true to overwrite.`,
+    );
+  }
+
+  const walCheckpointed = await exists(sourceWalPath);
+
+  // Open source driver and read the checkpointed plaintext buffer.
+  const sourceDriver = createConcurrentFileDriver({
+    directory: sourceDirectory,
+    wal: true,
+  });
+  if (sourceEncryption) {
+    withEncryption(sourceDriver, sourceEncryption);
+  }
+
+  const plaintext = await sourceDriver.read(collectionId);
+  if (!plaintext) {
+    // Pre-flight confirmed the file exists, so this indicates a race or a
+    // corrupt file. Surface it as a config error so the caller can retry.
+    throw new InvalidConfigError(
+      `Source collection file exists but could not be read: ${sourcePath}.`,
+    );
+  }
+
+  // If a WAL existed in the source, separately verify it had no truncated
+  // (corrupt) tail entries. `sourceDriver.read()` silently drops truncated
+  // entries, which is acceptable at runtime but not during a migration where
+  // the caller expects either a complete copy or an error.
+  if (walCheckpointed) {
+    const config = readConfigFromHeader(plaintext);
+    if (config) {
+      const walTransforms = sourceEncryption
+        ? await (async () => {
+            // The concurrent driver already configured itself via
+            // configureEncryption; recreate transforms locally for the
+            // standalone WAL check.
+            const { encryptBuffer, decryptBuffer, resolveEncryptionKey } = await import('./encryption.js');
+            const resolved = resolveEncryptionKey(sourceEncryption);
+            return {
+              encrypt: (buf: Buffer) => encryptBuffer(buf, resolved),
+              decrypt: (buf: Buffer) => decryptBuffer(buf, resolved),
+            };
+          })()
+        : undefined;
+      const walResult = await readWalEntries(sourceWalPath, config, walTransforms);
+      if (walResult.truncated) {
+        throw new EncryptionError(
+          `Source WAL (${sourceWalPath}) has corrupted or truncated tail entries. ` +
+          `Refusing to migrate to avoid silent data loss. ` +
+          `Start the application once with the source directory to let it recover or checkpoint the WAL, then retry.`,
+        );
+      }
+    }
+  }
+
+  // Open destination driver. `wal: false` keeps the destination as a single
+  // clean base file with no sidecar — the ideal post-migration state.
+  const destDriver = createConcurrentFileDriver({
+    directory: destDirectory,
+    wal: false,
+  });
+  if (destEncryption) {
+    withEncryption(destDriver, destEncryption);
+  }
+
+  await destDriver.write(destId, plaintext);
+
+  // Verification: round-trip the dest and compare plaintext.
+  if (verify) {
+    const roundtrip = await destDriver.read(destId);
+    if (!roundtrip || !roundtrip.equals(plaintext)) {
+      // Remove the bad artifact so it can't be mistaken for a valid migration.
+      try {
+        await unlink(destPath);
+      } catch {
+        // Best-effort cleanup; surface the original failure regardless.
+      }
+      throw new EncryptionError(
+        'Migration verification failed: destination does not round-trip to source plaintext.',
+      );
+    }
+  }
+
+  const destStat = await stat(destPath);
+
+  return {
+    entryCount: readEntryCount(plaintext),
+    sourceFileBytes: sourceStat.size,
+    destFileBytes: destStat.size,
+    walCheckpointed,
+  };
+}

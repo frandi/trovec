@@ -21,6 +21,7 @@ Commands:
   import          Import entries from file
   export          Export entries
   inspect         Read raw .trovec file
+  migrate         Copy a collection to a new file, adding/removing/rotating encryption
   config          Manage configuration
   repl            Interactive REPL
   completions     Generate shell completions
@@ -234,6 +235,55 @@ Examples:
   trovec inspect data.trovec --header --format json
   trovec inspect data.trovec --encryption-key abc123...`.trim(),
 
+  migrate: `
+Usage: trovec migrate --source <dir-or-file> [--dest <dir-or-file>] [options]
+
+Non-destructively copy a collection to a new .trovec file, optionally adding,
+removing, or rotating AES-256-GCM encryption at rest. The source file is left
+byte-identical. Any pending WAL entries in the source are checkpointed into
+the destination so the dest is a single clean base file with no sidecar.
+
+The app must be stopped before running this command. If a .lock file is found
+next to the source, migration is refused.
+
+Source resolution:
+  --source <file.trovec>       Use this file directly.
+  --source <dir>               Auto-detect the single .trovec file in the dir.
+                               If multiple exist, pass --source <file.trovec>
+                               or --collection <id>.
+
+Destination resolution:
+  --dest <file.trovec>         Write to exactly this path.
+  --dest <dir>                 Write into this directory using the default name
+                               "<source-name>-enc.trovec" (or "-dec"/"-rekeyed"
+                               depending on the operation).
+  (omitted)                    Write next to the source with the default name.
+
+Options:
+  --source <path>              Source directory or .trovec file (required)
+  --dest <path>                Destination directory or .trovec file (optional)
+  --collection <id>            Disambiguate when the source directory has multiple .trovec files
+  --encryption-key <hex>       Source key — use when the source is already encrypted
+  --encryption-password <pass> Source password — alternative to --encryption-key
+  --new-key <hex>              Destination key (32-byte hex) — encrypt the dest
+  --new-password <pass>        Destination password (PBKDF2) — alternative to --new-key
+  --remove-encryption          Write the destination as plaintext (recovery path)
+  --force                      Overwrite the destination collection file if it exists
+  --no-verify                  Skip round-trip verification (not recommended)
+
+Examples:
+  # Enable encryption in place (writes ./.trovec/default-enc.trovec)
+  trovec migrate --source ./.trovec --new-key $(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
+
+  # Explicit source file, explicit dest file
+  trovec migrate --source ./.trovec/default.trovec --dest ./.trovec/default-v2.trovec --new-password "correct horse battery staple"
+
+  # Rotate the encryption key into the same directory
+  trovec migrate --source ./.trovec/default.trovec --encryption-key <old-hex> --new-key <new-hex>
+
+  # Decrypt back to plaintext (recovery)
+  trovec migrate --source ./.trovec/default.trovec --encryption-key <hex> --remove-encryption`.trim(),
+
   config: `
 Usage: trovec config <subcommand> [args]
 
@@ -333,6 +383,14 @@ const OPTIONS_CONFIG = {
   // encryption
   'encryption-key': { type: 'string' as const },
   'encryption-password': { type: 'string' as const },
+  // migrate
+  source: { type: 'string' as const },
+  dest: { type: 'string' as const },
+  'new-key': { type: 'string' as const },
+  'new-password': { type: 'string' as const },
+  'remove-encryption': { type: 'boolean' as const },
+  force: { type: 'boolean' as const },
+  'no-verify': { type: 'boolean' as const },
 };
 
 function parseCliArgs(argv: string[]): { command: string; positionals: string[]; flags: CliFlags } {
@@ -461,6 +519,12 @@ async function run(): Promise<void> {
     case 'inspect': {
       const { inspectCommand } = await import('./commands/inspect.js');
       await inspectCommand(positionals, flags);
+      break;
+    }
+
+    case 'migrate': {
+      const { migrateCommand } = await import('./commands/migrate.js');
+      await migrateCommand(positionals, flags);
       break;
     }
 

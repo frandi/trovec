@@ -61,6 +61,18 @@ describe('Encryption primitives', () => {
     expect(() => decryptBuffer(truncated, resolved)).toThrow(EncryptionError);
   });
 
+  it('plaintext Trovec buffer surfaces a targeted migration hint', () => {
+    const resolved = resolveEncryptionKey({ key: TEST_KEY });
+    // First byte 'V' (0x56) is the first byte of the "VCR\x01" magic. The
+    // remaining bytes just need to satisfy the minimum-header-size check so
+    // that the version branch runs.
+    const plaintext = Buffer.alloc(64);
+    plaintext[0] = 0x56; // 'V'
+    expect(() => decryptBuffer(plaintext, resolved)).toThrow(
+      /appears to be an unencrypted Trovec file.*trovec migrate/s,
+    );
+  });
+
   it('two encryptions produce different ciphertext', () => {
     const resolved = resolveEncryptionKey({ key: TEST_KEY });
     const plaintext = Buffer.from('same data');
