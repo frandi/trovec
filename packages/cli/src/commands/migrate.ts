@@ -1,5 +1,5 @@
 import { readdirSync, statSync } from 'node:fs';
-import { basename, dirname, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { migrateCollection } from '@trovec/core';
 import type { EncryptionOptions } from '@trovec/core';
 import { mergeConfig } from '../config.js';
@@ -55,6 +55,12 @@ function parseSource(source: string, collectionFlag: string | undefined): Locati
   const resolved = resolve(source);
 
   if (source.endsWith(TROVEC_EXT)) {
+    if (collectionFlag !== undefined) {
+      throw new CliError(
+        '--collection is only valid when --source points at a directory.',
+        'Drop --collection, or pass --source as a directory path.',
+      );
+    }
     return { dir: dirname(resolved), collectionId: basename(resolved, TROVEC_EXT) };
   }
 
@@ -121,8 +127,8 @@ export async function migrateCommand(_positionals: string[], flags: CliFlags): P
   const suffix = pickDefaultSuffix(sourceEncryption, destEncryption);
   const dest = parseDest(destArg, source, suffix);
 
-  const sourceFile = `${source.dir}/${source.collectionId}${TROVEC_EXT}`;
-  const destFile = `${dest.dir}/${dest.collectionId}${TROVEC_EXT}`;
+  const sourceFile = join(source.dir, `${source.collectionId}${TROVEC_EXT}`);
+  const destFile = join(dest.dir, `${dest.collectionId}${TROVEC_EXT}`);
   info(`Migrating ${sourceFile} → ${destFile}`);
 
   const result = await migrateCollection({

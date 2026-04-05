@@ -189,7 +189,7 @@ export async function migrateCollection(
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       throw new InvalidConfigError(
         `Source collection file not found: ${sourcePath}. ` +
-        `Check --source and --collection-id.`,
+        `Verify that sourceDirectory and collectionId are correct.`,
       );
     }
     throw err;
