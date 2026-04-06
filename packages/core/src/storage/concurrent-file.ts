@@ -4,7 +4,7 @@ import { brotliCompressSync, brotliDecompressSync, constants } from 'node:zlib';
 import { acquireLock } from './lock.js';
 import { appendWalEntries, readWalEntries, replayWal, deleteWal } from './wal.js';
 import type { WalTransforms } from './wal.js';
-import { resolveEncryptionKey, encryptBuffer, decryptBuffer } from './encryption.js';
+import { resolveEncryptionKey, encryptBufferV1, encryptBufferWithDek, decryptBuffer, decryptBufferWithDek } from './encryption.js';
 import type { ResolvedEncryption } from './encryption.js';
 import type {
   ConcurrentFileDriverOptions,
@@ -76,6 +76,24 @@ export function createConcurrentFileDriver(
   let resolvedEncryption: ResolvedEncryption | null = null;
   let walTransforms: WalTransforms | undefined;
 
+  // DEK cache for envelope encryption (v2). WAL entries are encrypted with the
+  // DEK directly (v1 format) to avoid per-entry envelope overhead. The DEK is
+  // learned on the first base file read or write.
+  const dekCache = new Map<string, Buffer>();
+
+  function ensureWalTransformsForDek(dek: Buffer): void {
+    const dekResolved: ResolvedEncryption = {
+      mode: 0, // raw key
+      key: dek,
+      iterations: 0,
+      kekVersionId: 0,
+    };
+    walTransforms = {
+      encrypt: (buf: Buffer) => encryptBufferV1(buf, dekResolved),
+      decrypt: (buf: Buffer) => decryptBuffer(buf, dekResolved),
+    };
+  }
+
   // Track WAL sequence numbers per collection
   const walSequences = new Map<string, number>();
   const walEntryCounts = new Map<string, number>();
@@ -114,9 +132,12 @@ export function createConcurrentFileDriver(
 
   async function readBaseFile(collectionId: string): Promise<Buffer | null> {
     try {
-      let raw: Buffer = await readFile(filePath(collectionId));
+      const raw: Buffer = await readFile(filePath(collectionId));
       if (resolvedEncryption) {
-        raw = decryptBuffer(raw, resolvedEncryption);
+        const { plaintext, dek } = decryptBufferWithDek(raw, resolvedEncryption);
+        dekCache.set(collectionId, dek);
+        ensureWalTransformsForDek(dek);
+        return decompress(plaintext);
       }
       return decompress(raw);
     } catch (err: unknown) {
@@ -131,7 +152,10 @@ export function createConcurrentFileDriver(
     const tmp = `${target}.tmp`;
     let output = compress(data);
     if (resolvedEncryption) {
-      output = encryptBuffer(output, resolvedEncryption);
+      const { buffer, dek } = encryptBufferWithDek(output, resolvedEncryption);
+      dekCache.set(collectionId, dek);
+      ensureWalTransformsForDek(dek);
+      output = buffer;
     }
     await fsWriteFile(tmp, output);
     await rename(tmp, target);
@@ -170,10 +194,9 @@ export function createConcurrentFileDriver(
 
     configureEncryption(options: EncryptionOptions): void {
       resolvedEncryption = resolveEncryptionKey(options);
-      walTransforms = {
-        encrypt: (buf: Buffer) => encryptBuffer(buf, resolvedEncryption!),
-        decrypt: (buf: Buffer) => decryptBuffer(buf, resolvedEncryption!),
-      };
+      // walTransforms are set lazily when the DEK is learned from the first
+      // base file read or write (see readBaseFile / writeBaseFile).
+      walTransforms = undefined;
     },
 
     async write(collectionId: string, data: Buffer): Promise<void> {
@@ -269,6 +292,7 @@ export function createConcurrentFileDriver(
         }
 
         collectionConfigs.delete(collectionId);
+        dekCache.delete(collectionId);
         return existed;
       } finally {
         await lock.release();
@@ -281,6 +305,7 @@ export function createConcurrentFileDriver(
       walSequences.clear();
       walEntryCounts.clear();
       collectionConfigs.clear();
+      dekCache.clear();
     },
 
     async appendWal(collectionId: string, ops: WalOperation[]): Promise<void> {
@@ -291,6 +316,13 @@ export function createConcurrentFileDriver(
         // Config unknown — this happens on fresh collections where read() returned null.
         // Signal to core.ts that WAL append is not possible yet by throwing a
         // specific error. The flush logic in core.ts will fall back to a full write.
+        throw new WalConfigNotReady();
+      }
+
+      // Encryption is configured but the DEK hasn't been learned yet (no base
+      // file read/write has happened). Fall back to a full write so the base
+      // file is created and the DEK + walTransforms are set up.
+      if (resolvedEncryption && !walTransforms) {
         throw new WalConfigNotReady();
       }
 

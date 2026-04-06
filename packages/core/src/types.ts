@@ -198,6 +198,19 @@ export interface EncryptionOptions {
    * @defaultValue `100_000`
    */
   iterations?: number;
+  /**
+   * KEK (Key Encryption Key) version identifier stored in the v2 envelope header.
+   * Allows operators to identify which KEK version encrypted a file without
+   * attempting decryption. Must fit in a uint32 (0–4294967295).
+   * @defaultValue `0`
+   */
+  kekVersionId?: number;
+  /**
+   * Previous KEKs to try when the primary key fails to unwrap the DEK.
+   * Enables rolling key rotation: old files can still be read while new writes
+   * use the current KEK. Keys are tried in order.
+   */
+  previousKeys?: Array<{ key?: Buffer; password?: string; iterations?: number }>;
 }
 
 /** Configuration options for the concurrent file-based storage driver. */

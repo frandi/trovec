@@ -77,7 +77,9 @@ function parseSource(source: string, collectionFlag: string | undefined): Locati
 function pickDefaultSuffix(
   sourceEnc: EncryptionOptions | undefined,
   destEnc: EncryptionOptions | undefined,
+  upgradeFormat: boolean,
 ): string {
+  if (upgradeFormat) return '-v2';
   if (!sourceEnc && destEnc) return '-enc';
   if (sourceEnc && !destEnc) return '-dec';
   if (sourceEnc && destEnc) return '-rekeyed';
@@ -101,9 +103,37 @@ function parseDest(dest: string | undefined, source: Location, suffix: string): 
   return { dir: resolved, collectionId: defaultId };
 }
 
+function parsePreviousKey(flags: CliFlags): Array<{ key?: Buffer; password?: string }> | undefined {
+  const hexKey = flags['previous-key'] as string | undefined;
+  const password = flags['previous-password'] as string | undefined;
+
+  if (!hexKey && !password) return undefined;
+
+  if (hexKey && password) {
+    throw new CliError(
+      'Cannot combine --previous-key and --previous-password.',
+      'Provide exactly one.',
+    );
+  }
+
+  if (hexKey) {
+    const buf = Buffer.from(hexKey, 'hex');
+    if (buf.length !== 32) {
+      throw new CliError(
+        `--previous-key must be exactly 32 bytes (64 hex characters), got ${buf.length} bytes.`,
+      );
+    }
+    return [{ key: buf }];
+  }
+
+  return [{ password: password! }];
+}
+
 export async function migrateCommand(_positionals: string[], flags: CliFlags): Promise<void> {
   const sourceArg = flags['source'] as string | undefined;
   const destArg = flags['dest'] as string | undefined;
+  const fastRekey = flags['fast-rekey'] === true;
+  const upgradeFormat = flags['upgrade-format'] === true;
 
   if (!sourceArg) {
     throw new CliError(
@@ -116,15 +146,22 @@ export async function migrateCommand(_positionals: string[], flags: CliFlags): P
   const sourceEncryption: EncryptionOptions | undefined = resolveEncryptionFlags(merged);
   const destEncryption: EncryptionOptions | undefined = resolveDestEncryptionFlags(flags);
 
-  if (!sourceEncryption && !destEncryption) {
+  // Inject previous keys for rolling rotation
+  const previousKeys = parsePreviousKey(flags);
+  if (previousKeys && sourceEncryption) {
+    sourceEncryption.previousKeys = previousKeys;
+  }
+
+  if (!sourceEncryption && !destEncryption && !upgradeFormat) {
     throw new CliError(
       'Migration requires a change in encryption state.',
-      'Provide --new-key / --new-password to encrypt, --remove-encryption to decrypt, or --encryption-key plus --new-key to rekey.',
+      'Provide --new-key / --new-password to encrypt, --remove-encryption to decrypt, ' +
+      '--encryption-key plus --new-key to rekey, or --upgrade-format to upgrade to v2 envelope encryption.',
     );
   }
 
   const source = parseSource(sourceArg, flags.collection as string | undefined);
-  const suffix = pickDefaultSuffix(sourceEncryption, destEncryption);
+  const suffix = pickDefaultSuffix(sourceEncryption, destEncryption, upgradeFormat);
   const dest = parseDest(destArg, source, suffix);
 
   const sourceFile = join(source.dir, `${source.collectionId}${TROVEC_EXT}`);
@@ -140,8 +177,13 @@ export async function migrateCommand(_positionals: string[], flags: CliFlags): P
     destEncryption,
     force: flags['force'] === true,
     verify: flags['no-verify'] !== true,
+    fastRekey,
+    upgradeFormat,
   });
 
+  if (result.fastRekeyed) {
+    info('Fast rekey: O(1) header-only rewrite (data unchanged).');
+  }
   info(`Entries migrated: ${result.entryCount}`);
   if (result.walCheckpointed) {
     info('WAL sidecar detected in source — entries checkpointed into destination.');

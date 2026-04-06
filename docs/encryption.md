@@ -118,17 +118,42 @@ read:  read from disk -> decrypt -> decompress -> deserialize
 
 With encryption + WAL:
 ```
-base write:  serialize -> compress -> encrypt -> write to disk
-base read:   read from disk -> decrypt -> decompress -> deserialize
-WAL append:  serialize entry -> encrypt entry -> append to file
-WAL read:    read encrypted entry -> decrypt -> validate CRC -> parse
+base write:  serialize -> compress -> encrypt (v2 envelope: DEK encrypts data, KEK wraps DEK) -> write to disk
+base read:   read from disk -> unwrap DEK with KEK -> decrypt data with DEK -> decompress -> deserialize
+WAL append:  serialize entry -> encrypt with DEK (v1 format) -> append to file
+WAL read:    read encrypted entry -> decrypt with DEK -> validate CRC -> parse
 ```
 
 Compression happens **before** encryption. This is intentional — encrypted data is incompressible (it looks like random bytes). By compressing the plaintext first, Trovec achieves optimal compression ratios.
 
+WAL entries are encrypted with the DEK (Data Encryption Key) using v1 direct format rather than the full v2 envelope. This avoids per-entry KEK overhead — the DEK is learned from the base file on the first read or write and cached for the session.
+
 ### Encrypted Buffer Format
 
-Every encrypted unit (file or WAL entry) uses the same 46-byte header:
+Trovec uses **v2 envelope encryption** for all new writes. A random DEK (Data Encryption Key) encrypts the data, and the user's KEK (Key Encryption Key) wraps the DEK. This two-layer design enables O(1) key rotation — only the 110-byte header needs rewriting when changing keys.
+
+#### v2 Envelope Format (current default, 110-byte header)
+
+```
+[0]       format version: 2
+[1]       key mode: 0 = raw key, 1 = password-derived (for KEK)
+[2..5]    KEK version ID: uint32 LE (identifies which KEK encrypted this file)
+[6..21]   salt: 16 bytes (zeros if raw key mode, random for password mode)
+[22..33]  KEK-IV: 12 bytes (random, used to encrypt the DEK)
+[34..49]  KEK-auth-tag: 16 bytes (GCM auth tag for DEK encryption)
+[50..81]  encrypted DEK: 32 bytes (the data key, wrapped by the KEK)
+[82..93]  data-IV: 12 bytes (random, used to encrypt the data)
+[94..109] data-auth-tag: 16 bytes (GCM auth tag for data encryption)
+[110..N]  ciphertext
+```
+
+- **KEK version ID** — allows operators to identify which KEK version encrypted a file without attempting decryption. Useful for tracking key rotation across a fleet.
+- **Encrypted DEK** — the random per-file data key, wrapped with the KEK. During key rotation (`rekeyBuffer`), only this section and the KEK metadata are rewritten — the data ciphertext remains untouched.
+- **AAD (Additional Authenticated Data)** — the format version, key mode, and KEK version ID are included as AAD when encrypting the DEK, preventing header field tampering.
+
+#### v1 Direct Format (legacy, 46-byte header)
+
+Files written before v2 use the v1 format. Trovec reads v1 files transparently — no migration is required for read compatibility. WAL entries also use v1 format internally (encrypted with the DEK rather than the KEK).
 
 ```
 [0]       format version: 1
@@ -139,27 +164,24 @@ Every encrypted unit (file or WAL entry) uses the same 46-byte header:
 [46..N]   ciphertext
 ```
 
-- **Format version** — enables future algorithm changes without breaking existing data
-- **Key mode** — tells the decryptor whether to expect a salt for key derivation
-- **Salt** — unique per write, used for PBKDF2 key derivation (zeros in raw key mode)
-- **IV (Initialization Vector)** — 12 random bytes per write, ensuring identical plaintext produces different ciphertext
-- **Auth tag** — GCM's 16-byte authentication tag, detecting both corruption and tampering
-- **Ciphertext** — the encrypted data
+To explicitly upgrade v1 files to v2 envelope format, use `trovec migrate --upgrade-format` or pass `upgradeFormat: true` to `migrateCollection()`.
 
 ### Encrypted WAL Format
 
-When using the concurrent driver with encryption, the WAL file uses a framed format:
+When using the concurrent driver with encryption, the WAL file uses a framed format. Each entry is encrypted with the **DEK** using v1 direct format (not the full v2 envelope), avoiding per-entry KEK overhead:
 
 ```
 [0..3]   encrypted header length (uint32 LE)
-[4..N]   encrypted(WAL header: magic + version + dimensions + quantization)
+[4..N]   encrypted(WAL header: magic + version + dimensions + quantization)  — v1 format, DEK as key
 
 Per entry:
   [0..3]  encrypted entry length (uint32 LE)
-  [4..N]  encrypted(original entry: payload + CRC32)
+  [4..N]  encrypted(original entry: payload + CRC32)  — v1 format, DEK as key
 ```
 
 The 4-byte length prefix for each entry is unencrypted — it's needed for framing (knowing where each entry ends). This only reveals entry sizes, not content.
+
+The DEK is learned lazily from the base file on the first read or write and cached for the duration of the session. If no base file exists yet (first write to a new collection), one is created to establish the DEK before WAL appends can begin.
 
 ## What Gets Encrypted
 
@@ -207,7 +229,8 @@ AES-256-GCM is hardware-accelerated on modern CPUs (AES-NI instruction set). The
 
 ### Storage Overhead
 
-- **46 bytes per encrypted unit** — negligible for collection files (megabytes) and bounded for WAL (at most `checkpoint_threshold x 46` bytes before compaction)
+- **110 bytes per base file** (v2 envelope header) — negligible for collection files (megabytes)
+- **46 bytes per WAL entry** (v1 header with DEK) — bounded by at most `checkpoint_threshold x 46` bytes before compaction
 
 ### CPU Overhead
 
@@ -221,7 +244,7 @@ Benchmarks with 128-dimension F32 vectors, raw key mode, concurrent file driver:
 | 50K | 493ms | 623ms | 687ms | 809ms | 47.5MB |
 | 100K | 987ms | 1291ms | 1459ms | 1592ms | 95MB |
 
-At small sizes, encryption overhead is within noise. At 100K entries (the practical comfort zone), flush adds ~30% and read adds ~9%. File sizes are identical — the 46-byte header is negligible.
+At small sizes, encryption overhead is within noise. At 100K entries (the practical comfort zone), flush adds ~30% and read adds ~9%. File sizes are identical — the 110-byte v2 header is negligible.
 
 **WAL append throughput** (500 appends, 128d): plain 2422 ops/sec → encrypted 2140 ops/sec (+13% latency). Per-entry encryption cost is constant (~0.06ms) regardless of collection size.
 
@@ -238,8 +261,26 @@ At small sizes, encryption overhead is within noise. At 100K entries (the practi
 | `key` | `Buffer` | — | Raw 32-byte encryption key (mutually exclusive with `password`) |
 | `password` | `string` | — | Password for PBKDF2 key derivation (mutually exclusive with `key`) |
 | `iterations` | `number` | `100_000` | PBKDF2 iteration count (only with `password`) |
+| `kekVersionId` | `number` | `0` | KEK version identifier stored in the v2 header (uint32, 0–4294967295). Useful for tracking which key version encrypted a file. |
+| `previousKeys` | `Array<{ key?, password?, iterations? }>` | — | Previous KEKs to try when the primary key fails to unwrap the DEK. Enables rolling key rotation: old files can still be read while new writes use the current KEK. Keys are tried in order. |
 
 Works with any `StorageDriver`. For built-in drivers, encryption is handled internally (compress-then-encrypt, WAL support). For custom drivers, a transparent encrypt/decrypt wrapper is applied.
+
+### Key Rotation
+
+v2 envelope encryption supports two key rotation strategies:
+
+**Fast rekey (O(1), header-only):** Use `rekeyBuffer()` or `trovec migrate --fast-rekey` to re-wrap the DEK with a new KEK without re-encrypting data. Only the 110-byte header is rewritten regardless of data size.
+
+**Rolling rotation (zero-downtime):** Configure `previousKeys` so the system can read files encrypted with any previous KEK while writing new files with the current KEK. Deploy the new key, then migrate files at your own pace.
+
+```typescript
+const driver = withEncryption(createConcurrentFileDriver({ wal: true }), {
+  key: newKey,
+  kekVersionId: 2,
+  previousKeys: [{ key: oldKey }],
+});
+```
 
 ## When to Use
 
