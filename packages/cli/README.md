@@ -223,6 +223,47 @@ trovec inspect data.trovec --header --format json
 trovec inspect data.trovec --encryption-password "my-secret"
 ```
 
+#### `trovec migrate`
+
+Migrate a collection between encryption states: encrypt, decrypt, rotate keys, upgrade format, or fast-rekey.
+
+```bash
+# Encrypt a plaintext collection
+trovec migrate --source ./data --new-key "$KEY"
+
+# Decrypt an encrypted collection
+trovec migrate --source ./data --encryption-key "$KEY" --remove-encryption
+
+# Rotate encryption key
+trovec migrate --source ./data --encryption-key "$OLD_KEY" --new-key "$NEW_KEY"
+
+# Fast rekey (O(1) header-only, v2 format required)
+trovec migrate --source ./data --encryption-key "$OLD_KEY" --new-key "$NEW_KEY" --fast-rekey
+
+# Upgrade v1 to v2 envelope format (same key)
+trovec migrate --source ./data --encryption-key "$KEY" --new-key "$KEY" --upgrade-format
+
+# Rotate with previous key fallback
+trovec migrate --source ./data --encryption-key "$NEW_KEY" --previous-key "$OLD_KEY" --new-key "$NEW_KEY"
+```
+
+| Option | Description |
+|--------|-------------|
+| `--source <path>` | Source directory or file (required) |
+| `--dest <path>` | Destination directory or file (default: source dir with suffix) |
+| `--collection <id>` | Collection ID |
+| `--new-key <hex>` | New encryption key for the destination |
+| `--new-password <pass>` | New password for the destination |
+| `--remove-encryption` | Write destination as plaintext |
+| `--fast-rekey` | O(1) header-only rekey (v2 sources only, falls back if not possible) |
+| `--upgrade-format` | Force v2 envelope format output (allows same-key migration) |
+| `--previous-key <hex>` | Previous key for rolling rotation (fallback when primary fails) |
+| `--previous-password <pass>` | Previous password for rolling rotation |
+| `--force` | Overwrite existing destination file |
+| `--no-verify` | Skip round-trip verification |
+
+See the [migration guide](../../docs/migration/encryption-at-rest.md) for detailed walkthrough and examples.
+
 ### Bulk Import / Export
 
 #### `trovec import`
@@ -343,6 +384,7 @@ Output format auto-detects: `table` when writing to a terminal, `json` when pipe
 | `trovec stats` | `db.stats()` |
 | `trovec flush` | `db.flush()` |
 | `trovec embed` | `db.embed()` |
+| `trovec migrate` | `migrateCollection()` |
 
 ## License
 

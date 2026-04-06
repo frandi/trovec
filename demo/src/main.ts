@@ -597,7 +597,7 @@ async function main() {
     if (useEncryption) {
       console.log();
       info('Encryption', `${c.green}AES-256-GCM${c.reset}`);
-      info('Encryption overhead', `46 bytes ${c.dim}(header: version + mode + salt + IV + auth tag)${c.reset}`);
+      info('Encryption overhead', `110 bytes ${c.dim}(v2 envelope header: KEK metadata + encrypted DEK + data IV + auth tag)${c.reset}`);
 
       // Show that file is opaque
       const rawFileBytes = await readFile(join(fileDriver.directory, `${db.collectionId}.trovec`));

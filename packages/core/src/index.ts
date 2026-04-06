@@ -42,7 +42,8 @@ export { createFileDriver } from './storage/file.js';
 
 export { createConcurrentFileDriver } from './storage/concurrent-file.js';
 
-export { withEncryption, decryptBuffer, resolveEncryptionKey } from './storage/encryption.js';
+export { withEncryption, encryptBuffer, encryptBufferWithDek, decryptBuffer, decryptBufferWithDek, unwrapDekFromBuffer, rekeyBuffer, resolveEncryptionKey } from './storage/encryption.js';
+export { FORMAT_VERSION_V1, FORMAT_VERSION_V2, V1_HEADER_SIZE, V2_HEADER_SIZE } from './storage/encryption.js';
 export type { ResolvedEncryption } from './storage/encryption.js';
 
 export { migrateCollection } from './storage/migrate.js';

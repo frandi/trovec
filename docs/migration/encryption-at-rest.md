@@ -35,6 +35,9 @@ the full API, key management guidance, and performance notes.
 
 - **Decrypt** an encrypted collection back to plaintext (`--remove-encryption`) — useful for recovery or debugging.
 - **Rotate** an existing encryption key to a new one (`--encryption-key` + `--new-key`).
+- **Fast rekey** an existing v2 collection to a new key in O(1) time (`--fast-rekey`) — only the 110-byte header is rewritten, data ciphertext is untouched.
+- **Upgrade format** from v1 direct encryption to v2 envelope encryption (`--upgrade-format`) — can use the same key, no key change required.
+- **Rolling rotation** with previous keys (`--previous-key` / `--previous-password`) — read files encrypted with an old key while writing with the current one.
 
 ## Before you start
 
@@ -253,7 +256,105 @@ The options mirror the CLI flags:
   to write plaintext (e.g. during decryption-for-recovery).
 - `force: true` — overwrite an existing destination file.
 - `verify: false` — skip the round-trip verification (not recommended).
+- `fastRekey: true` — attempt O(1) header-only rekey. Only works when both
+  source and destination use encryption and the source is v2 envelope format.
+  Falls back to full migration if conditions aren't met (e.g. v1 source or
+  WAL sidecar present).
+- `upgradeFormat: true` — force the output to v2 envelope format. Allows
+  same-key migration (which is otherwise rejected). Useful for explicitly
+  upgrading v1 files to v2.
 
 The returned `MigrationResult` includes the entry count, source/dest file
-sizes, and a `walCheckpointed` flag indicating whether any WAL entries from
-the source were folded into the destination during migration.
+sizes, a `walCheckpointed` flag indicating whether any WAL entries from
+the source were folded into the destination, and a `fastRekeyed` flag
+indicating whether the O(1) header-only rekey path was used.
+
+## Upgrading from v1 to v2 envelope format
+
+Collections created before v2 envelope encryption use the v1 direct format.
+Trovec reads v1 files transparently, so **no migration is required for basic
+operation**. However, upgrading to v2 unlocks O(1) fast rekey and
+`kekVersionId` tracking.
+
+To upgrade without changing keys:
+
+```bash
+trovec migrate \
+  --source ./data \
+  --encryption-key "$KEY" \
+  --new-key "$KEY" \
+  --upgrade-format
+```
+
+Or programmatically:
+
+```ts
+await migrateCollection({
+  sourceDirectory: './data',
+  destDirectory: './data-v2',
+  collectionId: 'my_collection',
+  sourceEncryption: { key },
+  destEncryption: { key },  // same key is fine
+  upgradeFormat: true,
+});
+```
+
+## Fast rekey (O(1) key rotation)
+
+Once a collection uses v2 envelope format, key rotation can be done in O(1)
+time — only the 110-byte header is rewritten, the data ciphertext is
+preserved byte-for-byte regardless of collection size.
+
+```bash
+trovec migrate \
+  --source ./data \
+  --encryption-key "$OLD_KEY" \
+  --new-key "$NEW_KEY" \
+  --fast-rekey
+```
+
+Or programmatically:
+
+```ts
+const result = await migrateCollection({
+  sourceDirectory: './data',
+  destDirectory: './data-rekeyed',
+  collectionId: 'my_collection',
+  sourceEncryption: { key: oldKey },
+  destEncryption: { key: newKey },
+  fastRekey: true,
+});
+console.log(result.fastRekeyed); // true
+```
+
+Fast rekey falls back to a full migration when:
+
+- The source file is v1 format (upgrade to v2 first)
+- A WAL sidecar exists (needs full migration to checkpoint WAL entries)
+
+## Rolling key rotation with previous keys
+
+For zero-downtime key rotation, configure `previousKeys` so the system can
+read files encrypted with any previous KEK while writing new files with the
+current KEK.
+
+```bash
+# Migrate a collection encrypted with OLD_KEY, reading with NEW_KEY + OLD_KEY fallback
+trovec migrate \
+  --source ./data \
+  --encryption-key "$NEW_KEY" \
+  --previous-key "$OLD_KEY" \
+  --new-key "$NEW_KEY"
+```
+
+Or programmatically:
+
+```ts
+await migrateCollection({
+  sourceDirectory: './data',
+  destDirectory: './data-rotated',
+  collectionId: 'my_collection',
+  sourceEncryption: { key: newKey, previousKeys: [{ key: oldKey }] },
+  destEncryption: { key: newKey },
+});
+```
