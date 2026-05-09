@@ -19,7 +19,7 @@ Question   ──> Trovec semantic search (top-K chunks)
 
 | Component | Library | Purpose |
 |-----------|---------|---------|
-| Vector store | `@trovec/core` | Store and query document embeddings (with persistent file storage) |
+| Vector store | `@trovec/core` | Store and query document embeddings (concurrent-safe file storage with optional AES-256-GCM encryption at rest) |
 | Embeddings | `@trovec/embedder-openai` | Generate 1536-dim vectors via OpenAI API |
 | PDF parsing | `@llamaindex/liteparse` | Extract text with page-level structure |
 | Answer generation | `openai` (Responses API) | Synthesize cited answers from retrieved chunks |
@@ -31,7 +31,8 @@ Question   ──> Trovec semantic search (top-K chunks)
 - LiteParse extracts text per page from the uploaded PDF
 - Each page is split into paragraph-level chunks (100-500 chars) for more focused embeddings
 - Each chunk stores metadata: page number, source file, full text, and a short preview
-- Data is automatically persisted to disk via Trovec's file storage driver
+- Data is persisted via Trovec's **concurrent file storage driver** (`createConcurrentFileDriver`), which uses a write-ahead log and OS-level file locking so multiple ingest requests can write safely in parallel
+- Optionally wrapped with **`withEncryption`** for transparent AES-256-GCM encryption at rest
 
 **Retrieval:**
 - Trovec performs brute-force cosine similarity search across all stored chunks
@@ -86,6 +87,18 @@ Environment variables (can be set in `.env`):
 |----------|---------|-------------|
 | `PORT` | `3737` | Server port |
 | `OPENAI_API_KEY` | *(required)* | OpenAI API key for embeddings and answer generation |
+| `TROVEC_ENCRYPTION_KEY` | *(optional)* | 64-char hex string (32 raw bytes) — enables AES-256-GCM encryption at rest using a raw key |
+| `TROVEC_ENCRYPTION_PASSWORD` | *(optional)* | Passphrase — enables AES-256-GCM encryption at rest using a PBKDF2-derived key. Ignored if `TROVEC_ENCRYPTION_KEY` is set |
+
+### Generating an encryption key
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Save the output as `TROVEC_ENCRYPTION_KEY` in your `.env`. **Losing the key means losing the data** — there is no recovery path.
+
+> **Already have a plaintext `.trovec/` directory from a previous run?** You can't just set `TROVEC_ENCRYPTION_KEY` — the server will fail to start with an `EncryptionError`. Instead, follow the [encryption-at-rest migration guide](../../docs/migration/encryption-at-rest.md), which uses this POC as the worked example.
 
 ## API Endpoints
 
