@@ -285,6 +285,7 @@ const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 > | Adapter | Default dimensions | Notes |
 > |---------|-------------------|-------|
 > | [`@trovec/embedder-local`](../embedder-local/) | 64 | Trigram hash, zero deps, offline — for testing/demos |
+> | [`@trovec/embedder-edge`](../embedder-edge/) | 384 | Bundled ONNX model (~32 MB), real semantic embeddings, fully offline — recommended default |
 > | [`@trovec/embedder-ollama`](../embedder-ollama/) | 768 | Local Ollama server, no API key — good semantic quality |
 > | [`@trovec/embedder-openai`](../embedder-openai/) | 1536 | OpenAI API — best semantic quality |
 >

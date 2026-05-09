@@ -1,0 +1,67 @@
+{
+  "name": "@trovec/embedder-edge",
+  "version": "0.1.0",
+  "description": "Bundled WASM/ONNX text embedder for Trovec. Real semantic embeddings, fully offline, no API keys.",
+  "author": "frandi-tech",
+  "type": "module",
+  "main": "./dist/esm/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "models",
+    "icon.png",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "fetch:models": "node scripts/fetch-models.mjs",
+    "build": "npm run fetch:models && npm run build:esm",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "clean": "node -e \"fs.rmSync('dist',{recursive:true,force:true})\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "npm run fetch:models && vitest run --config vitest.integration.config.ts",
+    "prepublishOnly": "npm run clean && npm run fetch:models && npm run build && npm test"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "trovec",
+    "embedder",
+    "edge",
+    "onnx",
+    "wasm",
+    "embedding",
+    "vector",
+    "offline",
+    "local"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/frandi/trovec.git",
+    "directory": "packages/embedder-edge"
+  },
+  "peerDependencies": {
+    "@trovec/core": "^2.3.0"
+  },
+  "dependencies": {
+    "onnxruntime-node": "^1.18.0"
+  },
+  "devDependencies": {
+    "@huggingface/transformers": "^4.2.0",
+    "@types/node": "^22.0.0"
+  }
+}

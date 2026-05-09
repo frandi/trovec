@@ -1,0 +1,4 @@
+# Empty: this exists solely to override the sibling .gitignore for `npm pack`.
+# Model files are intentionally excluded from git (see .gitignore) but MUST be
+# included in the npm tarball — they are fetched into this directory by
+# scripts/fetch-models.mjs prior to publish.

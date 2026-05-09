@@ -1,0 +1,237 @@
+{
+  "note": "Reference token IDs from @huggingface/transformers AutoTokenizer for bge-small-en-v1.5. Regenerate via scripts/generate-tokenizer-goldens.mjs.",
+  "modelDir": "models/bge-small-en-v1.5",
+  "cases": [
+    {
+      "input": "",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        102
+      ]
+    },
+    {
+      "input": "hello",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        7592,
+        102
+      ]
+    },
+    {
+      "input": "Hello, World!",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        7592,
+        1010,
+        2088,
+        999,
+        102
+      ]
+    },
+    {
+      "input": "The quick brown fox jumps over the lazy dog.",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        1996,
+        4248,
+        2829,
+        4419,
+        14523,
+        2058,
+        1996,
+        13971,
+        3899,
+        1012,
+        102
+      ]
+    },
+    {
+      "input": "embeddings are vectors",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        7861,
+        8270,
+        4667,
+        2015,
+        2024,
+        19019,
+        102
+      ]
+    },
+    {
+      "input": "snowflake snowflakes snowflaking",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        4586,
+        10258,
+        13808,
+        4586,
+        10258,
+        20060,
+        4586,
+        10258,
+        15495,
+        102
+      ]
+    },
+    {
+      "input": "résumé café naïve",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        13746,
+        7668,
+        15743,
+        102
+      ]
+    },
+    {
+      "input": "BAAI/bge-small-en-v1.5 is a model",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        8670,
+        4886,
+        1013,
+        1038,
+        3351,
+        1011,
+        2235,
+        1011,
+        4372,
+        1011,
+        1058,
+        2487,
+        1012,
+        1019,
+        2003,
+        1037,
+        2944,
+        102
+      ]
+    },
+    {
+      "input": "this-is-a-hyphenated-token",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        2023,
+        1011,
+        2003,
+        1011,
+        1037,
+        1011,
+        1044,
+        22571,
+        10222,
+        4383,
+        1011,
+        19204,
+        102
+      ]
+    },
+    {
+      "input": "multi  spaces\tand\nnewlines",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        4800,
+        7258,
+        1998,
+        2047,
+        12735,
+        102
+      ]
+    },
+    {
+      "input": "中文 测试 mixed with english",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        1746,
+        1861,
+        100,
+        100,
+        3816,
+        2007,
+        2394,
+        102
+      ]
+    },
+    {
+      "input": "antidisestablishmentarianismantidisestablishmentarianismantidisestablishmentarianismantidisestablishmentarianism",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        100,
+        102
+      ]
+    },
+    {
+      "input": "punctuation: dots... commas, semicolons; question? exclamation!",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        26136,
+        6593,
+        14505,
+        1024,
+        14981,
+        1012,
+        1012,
+        1012,
+        4012,
+        9335,
+        1010,
+        4100,
+        25778,
+        5644,
+        1025,
+        3160,
+        1029,
+        4654,
+        20464,
+        8067,
+        3508,
+        999,
+        102
+      ]
+    },
+    {
+      "input": "   leading and trailing   ",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        2877,
+        1998,
+        12542,
+        102
+      ]
+    },
+    {
+      "input": "GPT-4 OpenAI Anthropic Claude",
+      "maxLength": 32,
+      "inputIds": [
+        101,
+        14246,
+        2102,
+        1011,
+        1018,
+        2330,
+        4886,
+        14405,
+        8093,
+        7361,
+        2594,
+        8149,
+        102
+      ]
+    }
+  ]
+}

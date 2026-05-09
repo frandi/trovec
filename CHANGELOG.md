@@ -5,6 +5,14 @@ All notable changes to Trovec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`@trovec/embedder-edge` (new package, `0.1.0`).** Bundled ONNX text embedder for Trovec. Ships the INT8 quantized variant of `bge-small-en-v1.5` (~32 MB) and runs inference in-process via `onnxruntime-node` — no API keys, no Ollama server, no network calls at runtime. Fills the quality gap between `embedder-local` (toy) and `embedder-ollama`/`embedder-openai` (heavyweight setup). The `Embedder.model` identity is `"bge-small-en-v1.5@1.0.0"`, picked up by the v2.3.0 mismatch warning so weight-version changes are surfaced automatically. Node-only in v0.1.0; browser support tracked separately. Versioned independently on a `0.x` line, signaling experimental status.
+
+---
+
 ## [2.3.0] - 2026-05-09
 
 This release lays the groundwork for an upcoming WASM-backed embedder by adding embedder identity tracking to the persisted file format. The change closes a real footgun on its own — it warns when stored vectors and the current embedder come from different embedding spaces — and ensures users upgrading to a future edge-embedder release have the protection in place from day one. All public APIs remain backward compatible with `2.2.0`.

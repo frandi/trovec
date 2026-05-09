@@ -35,6 +35,7 @@ We respect your time. If Trovec fits your needs, you get a clean, simple API wit
 |---------|-------------|-----|
 | [`@trovec/core`](packages/core/) | Core vector database library | [![npm](https://img.shields.io/npm/v/@trovec/core)](https://www.npmjs.com/package/@trovec/core) |
 | [`@trovec/embedder-local`](packages/embedder-local/) | Zero-dependency local embedder (testing/demos) | [![npm](https://img.shields.io/npm/v/@trovec/embedder-local)](https://www.npmjs.com/package/@trovec/embedder-local) |
+| [`@trovec/embedder-edge`](packages/embedder-edge/) | Bundled ONNX embedder — real semantic embeddings, fully offline, no setup | [![npm](https://img.shields.io/npm/v/@trovec/embedder-edge)](https://www.npmjs.com/package/@trovec/embedder-edge) |
 | [`@trovec/embedder-openai`](packages/embedder-openai/) | OpenAI embeddings adapter | [![npm](https://img.shields.io/npm/v/@trovec/embedder-openai)](https://www.npmjs.com/package/@trovec/embedder-openai) |
 | [`@trovec/embedder-ollama`](packages/embedder-ollama/) | Ollama local embeddings adapter | [![npm](https://img.shields.io/npm/v/@trovec/embedder-ollama)](https://www.npmjs.com/package/@trovec/embedder-ollama) |
 
@@ -53,6 +54,9 @@ npm install @trovec/core
 
 # With local embedder (no API key needed — great for trying out Trovec)
 npm install @trovec/core @trovec/embedder-local
+
+# With bundled ONNX embedder (real semantic embeddings, fully offline, no setup)
+npm install @trovec/core @trovec/embedder-edge
 
 # With Ollama embeddings (local, no API key needed — requires running Ollama server)
 npm install @trovec/core @trovec/embedder-ollama
@@ -98,6 +102,7 @@ trovec/
   packages/
     core/                  Core library
     embedder-local/        Local embedder (testing/demos)
+    embedder-edge/         Bundled ONNX embedder (offline, real semantic embeddings)
     embedder-openai/       OpenAI embeddings adapter
     embedder-ollama/       Ollama local embeddings adapter
     cli/                   Command-line interface

@@ -1,9 +1,19 @@
 name: Publish
 
+# Triggered by:
+#   v*               — synchronized release (e.g., v2.3.0). Tag the repo after
+#                      bumping multiple packages together.
+#   *-v*             — single-package release (e.g., embedder-edge-v0.1.0).
+#                      Tag the repo after bumping one package on its own line.
+#
+# The publish step diffs each workspace's local version against the npm
+# registry and publishes only what's new — so both tag patterns work and
+# accidentally re-running on an old tag is a no-op.
 on:
   push:
     tags:
       - 'v*'
+      - '*-v*'
 
 jobs:
   publish:
@@ -27,6 +37,29 @@ jobs:
 
       - run: npm test
 
-      - run: npm publish --workspaces --access public --provenance
+      - name: Publish new package versions
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -e
+          for pkg_dir in packages/*/; do
+            pkg_json="$pkg_dir/package.json"
+            [ -f "$pkg_json" ] || continue
+
+            name=$(node -p "require('./$pkg_json').name")
+            version=$(node -p "require('./$pkg_json').version")
+            is_private=$(node -p "Boolean(require('./$pkg_json').private)")
+
+            if [ "$is_private" = "true" ]; then
+              echo "skip $name (private)"
+              continue
+            fi
+
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "skip $name@$version (already on npm)"
+              continue
+            fi
+
+            echo "publish $name@$version"
+            npm publish --workspace="$pkg_dir" --access public --provenance
+          done

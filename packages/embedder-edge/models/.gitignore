@@ -1,0 +1,10 @@
+# Bundled-but-not-committed model assets fetched by scripts/fetch-models.mjs.
+# Tracked files: manifest.json (pinned revision + SHA256 checksums per file),
+#                NOTICE.md (license attribution).
+*.onnx
+*.onnx_data
+tokenizer.json
+tokenizer_config.json
+config.json
+special_tokens_map.json
+vocab.txt
