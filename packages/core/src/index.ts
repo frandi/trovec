@@ -50,3 +50,4 @@ export { migrateCollection } from './storage/migrate.js';
 export type { MigrateCollectionOptions, MigrationResult } from './storage/migrate.js';
 
 export { serialize, deserialize } from './serialization.js';
+export type { PersistedMetadata } from './serialization.js';

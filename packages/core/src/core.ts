@@ -45,7 +45,16 @@ export async function create(config: TrovecConfig): Promise<Trovec> {
   // Auto-load existing data from storage driver
   const buffer = await resolved.storageDriver.read(resolved.collectionId);
   if (buffer) {
-    deserialize(buffer, instance);
+    const metadata = deserialize(buffer, instance);
+    const persistedId = metadata?.embedderId;
+    const currentId = resolved.embedder?.model;
+    if (persistedId && currentId && persistedId !== currentId) {
+      console.warn(
+        `Trovec: collection "${resolved.collectionId}" was created with embedder ` +
+        `"${persistedId}" but the current embedder is "${currentId}". ` +
+        `Stored vectors may be incompatible. Use a matching embedder or rebuild the collection.`
+      );
+    }
   }
 
   // Initialize WAL buffer if using a WAL-aware storage driver

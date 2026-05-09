@@ -290,6 +290,12 @@ const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 >
 > See [Writing an Embedder Adapter](#writing-an-embedder-adapter) below for how to create your own.
 
+#### Embedder identity and stored vectors
+
+Trovec records the configured `Embedder.model` string in each persisted `.trovec` file. When a collection is loaded with a different embedder, Trovec emits a `console.warn` to surface the mismatch — stored vectors and new query vectors come from different embedding spaces, so similarity scores would be silently wrong. The warning is informational; the load still succeeds, and you can either use the matching embedder or rebuild the collection.
+
+The persisted identity is the `model` string itself. Adapters that bundle their own model weights should include a version suffix (for example, `"all-MiniLM-L6-v2@1.0.0"`) so a weight upgrade triggers the warning. Adapters that delegate to an external service (`embedder-openai`, `embedder-ollama`) can use the model name as-is — versioning is owned by the service.
+
 ## API Reference
 
 `create()` returns a `Trovec` object with bound methods. All examples below use the fluent style. A functional API is also available for tree-shaking and backward compatibility (see [Functional API](#functional-api)).

@@ -370,12 +370,22 @@ function deserializeToMap(
   const HEADER_SIZE = 16;
   if (buffer.length < HEADER_SIZE) return;
 
+  const version = buffer.readUInt8(4);
   const dimensions = buffer.readUInt32LE(5);
   const QUANT_REVERSE: Array<'F32' | 'INT8' | 'BIT'> = ['F32', 'INT8', 'BIT'];
   const quantization = QUANT_REVERSE[buffer.readUInt8(9)];
   const entryCount = buffer.readUInt32LE(11);
 
   let offset = HEADER_SIZE;
+
+  // v2 carries a uint16-prefixed JSON metadata section between header and entries.
+  // We don't interpret it here — the WAL merge path is metadata-agnostic — but we
+  // must skip past it so entry parsing starts at the right offset.
+  if (version === 2) {
+    if (buffer.length < offset + 2) return;
+    const metadataLen = buffer.readUInt16LE(offset);
+    offset += 2 + metadataLen;
+  }
 
   for (let i = 0; i < entryCount; i++) {
     const idType = buffer.readUInt8(offset); offset += 1;
@@ -409,13 +419,29 @@ function serializeFromMap(
   const metricByte = originalBuffer.length >= 11 ? originalBuffer.readUInt8(10) : 0;
 
   const MAGIC = Buffer.from('VCR\x01');
-  const VERSION = 1;
+  const VERSION = 2;
   const HEADER_SIZE = 16;
   const QUANT_MAP: Record<string, number> = { F32: 0, INT8: 1, BIT: 2 };
 
+  // Preserve the metadata section verbatim from the original buffer so WAL
+  // checkpointing doesn't drop the embedder identity. If the original was v1
+  // (or absent), emit an empty `{}` metadata section to stay v2-conformant.
+  let metadataBuf = Buffer.from('{}', 'utf-8');
+  if (originalBuffer.length >= HEADER_SIZE + 2) {
+    const originalVersion = originalBuffer.readUInt8(4);
+    if (originalVersion === 2) {
+      const metadataLen = originalBuffer.readUInt16LE(HEADER_SIZE);
+      if (originalBuffer.length >= HEADER_SIZE + 2 + metadataLen) {
+        metadataBuf = Buffer.from(
+          originalBuffer.subarray(HEADER_SIZE + 2, HEADER_SIZE + 2 + metadataLen),
+        );
+      }
+    }
+  }
+
   const allEntries = Array.from(entries.values());
 
-  let totalSize = HEADER_SIZE;
+  let totalSize = HEADER_SIZE + 2 + metadataBuf.length;
   const prepared: { idType: number; idBuf: Buffer; quantized: QuantizedVector; contextBuf: Buffer | null }[] = [];
 
   for (const entry of allEntries) {
@@ -441,6 +467,10 @@ function serializeFromMap(
   buf.writeUInt8(metricByte, offset); offset += 1;
   buf.writeUInt32LE(allEntries.length, offset); offset += 4;
   buf.writeUInt8(0, offset); offset += 1; // reserved
+
+  // v2 metadata section, preserved verbatim from the original buffer.
+  buf.writeUInt16LE(metadataBuf.length, offset); offset += 2;
+  metadataBuf.copy(buf, offset); offset += metadataBuf.length;
 
   for (const { idType, idBuf, quantized, contextBuf } of prepared) {
     buf.writeUInt8(idType, offset); offset += 1;

@@ -3,31 +3,8 @@ import { create, stats } from '../src/core.js';
 import { get } from '../src/collection.js';
 import { query } from '../src/query.js';
 import { embed, embedMany, addWithText, addManyWithText, queryByText } from '../src/embedder.js';
-import type { Embedder } from '../src/types.js';
 import { TrovecError } from '../src/errors.js';
-
-function createMockEmbedder(dims: number): Embedder {
-  return {
-    get dimensions() {
-      return dims;
-    },
-    async embed(input: string) {
-      // Simple deterministic mock: hash-like embedding based on string
-      const embedding = new Array(dims).fill(0);
-      for (let i = 0; i < input.length; i++) {
-        embedding[i % dims] += input.charCodeAt(i) / 1000;
-      }
-      return { embedding };
-    },
-    async embedMany(inputs: string[]) {
-      const results = [];
-      for (const input of inputs) {
-        results.push(await this.embed(input));
-      }
-      return results;
-    },
-  };
-}
+import { createMockEmbedder } from './helpers.js';
 
 describe('embed', () => {
   it('delegates to the configured embedder', async () => {

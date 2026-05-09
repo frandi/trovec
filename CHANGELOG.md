@@ -5,6 +5,18 @@ All notable changes to Trovec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`@trovec/core`: Embedder identity tracking.** Persisted `.trovec` files now record the `Embedder.model` string in a small JSON metadata section, and `create()` emits a `console.warn` on load when the configured embedder differs from the one that produced the stored vectors. This catches the silent-incompatibility footgun that occurs when users swap embedders without rebuilding the collection. The `Embedder` interface is unchanged; existing adapters need no updates. New public type export: `PersistedMetadata`.
+
+### Changed
+
+- **`@trovec/core`: Persisted file format bumped from v1 to v2.** The 16-byte header layout is preserved; a `uint16`-prefixed JSON metadata section now sits between header and entries. **Forward-compatible:** the new core reads existing v1 files silently. **Not backward-compatible:** older `@trovec/core` versions cannot read files written by this release. Users who downgrade after upgrading must rebuild affected collections. WAL and encryption paths are unaffected.
+
+---
+
 ## [2.2.0] - 2026-04-05
 
 This release adds opt-in encryption at rest, a concurrent-safe file storage driver, and a handful of developer-experience improvements across the monorepo. All public APIs remain backward compatible with `2.1.0`.

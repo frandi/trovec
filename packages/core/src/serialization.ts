@@ -3,12 +3,16 @@ import type { TrovecInstance, QuantizationType, MetricType, EntryId, QuantizedVe
 // Binary format:
 // Header (16 bytes):
 //   [0..3]   magic: "VCR\x01" (4 bytes)
-//   [4]      version: 1 (1 byte)
+//   [4]      version: 1 or 2 (1 byte)
 //   [5..8]   dimensions: uint32 LE (4 bytes)
 //   [9]      quantization enum: 0=F32, 1=INT8, 2=BIT (1 byte)
 //   [10]     metric enum: 0=cosine, 1=euclidean, 2=dot, 3=hamming (1 byte)
 //   [11..14] entry count: uint32 LE (4 bytes)
 //   [15]     reserved (1 byte)
+//
+// Metadata section (v2 only, between header and entries):
+//   [0..1]   metadata JSON length: uint16 LE (always > 0 in v2)
+//   [2..N]   metadata JSON: UTF-8 (always a valid JSON object; "{}" when empty)
 //
 // Per entry:
 //   [0]      id type: 0=string, 1=bigint (1 byte)
@@ -22,8 +26,21 @@ import type { TrovecInstance, QuantizationType, MetricType, EntryId, QuantizedVe
 //   [N bytes] context JSON: UTF-8
 
 const MAGIC = Buffer.from('VCR\x01');
-const VERSION = 1;
+const VERSION = 2;
 const HEADER_SIZE = 16;
+
+/**
+ * Parsed metadata extracted from a v2 file's metadata section.
+ * Returned by {@link deserialize} so callers (e.g. {@link create}) can compare
+ * persisted state against the current configuration.
+ */
+export interface PersistedMetadata {
+  /**
+   * Identity of the embedder that produced the stored vectors.
+   * Mirrors {@link Embedder.model}. Used to detect embedder mismatches on load.
+   */
+  embedderId?: string;
+}
 
 const QUANT_MAP: Record<QuantizationType, number> = { F32: 0, INT8: 1, BIT: 2 };
 const QUANT_REVERSE: QuantizationType[] = ['F32', 'INT8', 'BIT'];
@@ -103,18 +120,30 @@ function readQuantizedData(buf: Buffer, offset: number, quantization: Quantizati
  * Serialize the entire collection to a compact binary buffer.
  *
  * The binary format includes a 16-byte header (magic bytes, version, dimensions,
- * quantization, metric, entry count) followed by each entry's ID, quantized vector
- * data, and optional JSON context.
+ * quantization, metric, entry count), a length-prefixed JSON metadata section
+ * (carrying the configured embedder identity, if any), and each entry's ID,
+ * quantized vector data, and optional JSON context.
  *
  * @param instance - The Trovec instance to serialize.
  * @returns A Buffer containing the serialized collection data.
  */
 export function serialize(instance: TrovecInstance): Buffer {
-  const { dimensions, quantization, metric } = instance.config;
+  const { dimensions, quantization, metric, embedder } = instance.config;
   const entries = Array.from(instance.entries.values());
 
+  // Build metadata JSON. Always a valid object — empty `{}` when there's nothing
+  // to record. This keeps v2 files self-describing under hex inspection.
+  const metadata: PersistedMetadata = {};
+  if (embedder?.model) {
+    metadata.embedderId = embedder.model;
+  }
+  const metadataBuf = Buffer.from(JSON.stringify(metadata), 'utf-8');
+  if (metadataBuf.length > 0xffff) {
+    throw new Error(`Metadata too large: ${metadataBuf.length} bytes (max 65535)`);
+  }
+
   // Calculate total buffer size
-  let totalSize = HEADER_SIZE;
+  let totalSize = HEADER_SIZE + 2 + metadataBuf.length;
 
   const entryBuffers: { idType: number; idBuf: Buffer; quantized: QuantizedVector; contextBuf: Buffer | null }[] = [];
 
@@ -143,6 +172,10 @@ export function serialize(instance: TrovecInstance): Buffer {
   buf.writeUInt32LE(entries.length, offset); offset += 4;
   buf.writeUInt8(0, offset); offset += 1; // reserved
 
+  // Write metadata section (v2)
+  buf.writeUInt16LE(metadataBuf.length, offset); offset += 2;
+  metadataBuf.copy(buf, offset); offset += metadataBuf.length;
+
   // Write entries
   for (const { idType, idBuf, quantized, contextBuf } of entryBuffers) {
     buf.writeUInt8(idType, offset); offset += 1;
@@ -165,13 +198,17 @@ export function serialize(instance: TrovecInstance): Buffer {
  * Replace the current collection contents with data from a serialized buffer.
  *
  * Validates that the buffer's magic bytes, version, dimensions, and quantization
- * type match the instance configuration before loading entries.
+ * type match the instance configuration before loading entries. Reads both v1
+ * (legacy, no metadata section) and v2 (current, with metadata) formats. The
+ * parsed metadata is returned so callers can compare it against runtime config
+ * (e.g. {@link create} uses this to detect embedder mismatches).
  *
  * @param buffer - A buffer produced by {@link serialize}.
  * @param instance - The Trovec instance to populate.
+ * @returns Parsed metadata for v2 buffers, or `null` for v1 buffers.
  * @throws {Error} If the buffer is malformed, or dimensions/quantization do not match.
  */
-export function deserialize(buffer: Buffer, instance: TrovecInstance): void {
+export function deserialize(buffer: Buffer, instance: TrovecInstance): PersistedMetadata | null {
   const { dimensions, quantization } = instance.config;
 
   // Read and validate header
@@ -185,7 +222,7 @@ export function deserialize(buffer: Buffer, instance: TrovecInstance): void {
   }
 
   const version = buffer.readUInt8(4);
-  if (version !== VERSION) {
+  if (version !== 1 && version !== 2) {
     throw new Error(`Unsupported version: ${version}`);
   }
 
@@ -206,6 +243,30 @@ export function deserialize(buffer: Buffer, instance: TrovecInstance): void {
   // byte 15 is reserved
 
   let offset = HEADER_SIZE;
+
+  // v2 has a length-prefixed JSON metadata section right after the header.
+  let metadata: PersistedMetadata | null = null;
+  if (version === 2) {
+    if (buffer.length < offset + 2) {
+      throw new Error('Buffer too small for metadata length');
+    }
+    const metadataLen = buffer.readUInt16LE(offset);
+    offset += 2;
+    if (buffer.length < offset + metadataLen) {
+      throw new Error('Buffer too small for metadata payload');
+    }
+    if (metadataLen > 0) {
+      const metadataStr = buffer.toString('utf-8', offset, offset + metadataLen);
+      try {
+        metadata = JSON.parse(metadataStr) as PersistedMetadata;
+      } catch (err) {
+        throw new Error(`Invalid metadata JSON: ${(err as Error).message}`);
+      }
+    } else {
+      metadata = {};
+    }
+    offset += metadataLen;
+  }
 
   instance.entries.clear();
 
@@ -230,4 +291,6 @@ export function deserialize(buffer: Buffer, instance: TrovecInstance): void {
     const key = typeof id === 'bigint' ? `__bigint__:${id.toString()}` : id;
     instance.entries.set(key, { id, quantized, context });
   }
+
+  return metadata;
 }
