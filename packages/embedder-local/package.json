@@ -1,6 +1,6 @@
 {
   "name": "@trovec/embedder-local",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Zero-dependency local text embedder for Trovec. For prototyping and testing only.",
   "author": "frandi-tech",
   "type": "module",
@@ -55,7 +55,7 @@
     "directory": "packages/embedder-local"
   },
   "peerDependencies": {
-    "@trovec/core": "^2.2.0"
+    "@trovec/core": "^2.3.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0"

@@ -5,7 +5,9 @@ All notable changes to Trovec will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.3.0] - 2026-05-09
+
+This release lays the groundwork for an upcoming WASM-backed embedder by adding embedder identity tracking to the persisted file format. The change closes a real footgun on its own — it warns when stored vectors and the current embedder come from different embedding spaces — and ensures users upgrading to a future edge-embedder release have the protection in place from day one. All public APIs remain backward compatible with `2.2.0`.
 
 ### Added
 
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`@trovec/core`: Persisted file format bumped from v1 to v2.** The 16-byte header layout is preserved; a `uint16`-prefixed JSON metadata section now sits between header and entries. **Forward-compatible:** the new core reads existing v1 files silently. **Not backward-compatible:** older `@trovec/core` versions cannot read files written by this release. Users who downgrade after upgrading must rebuild affected collections. WAL and encryption paths are unaffected.
+- Internal dependency ranges between `@trovec/*` packages have been tightened from `^2.2.0` to `^2.3.0`.
 
 ---
 
@@ -47,4 +50,5 @@ This release adds opt-in encryption at rest, a concurrent-safe file storage driv
 
 Earlier releases (`2.0.0`, `2.1.0`, and prior) are not documented here; see the [GitHub release notes](https://github.com/frandi/trovec/releases) and commit history for details.
 
+[2.3.0]: https://github.com/frandi/trovec/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/frandi/trovec/compare/v2.1.0...v2.2.0

@@ -1,6 +1,6 @@
 {
   "name": "@trovec/core",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Lightweight, zero-dependency vector database library for Node.js",
   "author": "frandi-tech",
   "type": "module",
