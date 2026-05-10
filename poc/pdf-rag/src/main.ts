@@ -12,7 +12,7 @@ import { createServer } from './server.js';
 config();
 
 const PORT = parseInt(process.env.PORT ?? '3737', 10);
-const EMBEDDER_KIND = (process.env.EMBEDDER ?? 'openai').toLowerCase();
+const EMBEDDER_KIND = (process.env.EMBEDDER ?? 'edge').toLowerCase();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 const ENCRYPTION_KEY_HEX = process.env.TROVEC_ENCRYPTION_KEY ?? '';
 const ENCRYPTION_PASSWORD = process.env.TROVEC_ENCRYPTION_PASSWORD ?? '';
@@ -35,7 +35,10 @@ if (EMBEDDER_KIND === 'edge') {
 }
 
 if (!OPENAI_API_KEY) {
-  console.error('Note: OPENAI_API_KEY is required for answer generation. Embeddings will work but /api/answer will fail.');
+  console.warn(
+    'Warning: OPENAI_API_KEY not set. Ingest, /api/search, and /api/documents work; ' +
+    '/api/ask will fail until you set the key (the LLM answer-generation step needs OpenAI).',
+  );
 }
 
 // Concurrent file driver: safe for multi-process access (file locking + WAL).
