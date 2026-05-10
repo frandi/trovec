@@ -8,13 +8,22 @@
 
 import type { ModelSpec } from './runtime/onnx-runner.js';
 
-export type KnownModel = 'bge-small-en-v1.5';
+export type KnownModel = 'bge-small-en-v1.5' | 'bge-base-en-v1.5';
 
 export const MODELS: Record<KnownModel, ModelSpec> = {
   'bge-small-en-v1.5': {
     id: 'bge-small-en-v1.5',
     weightVersion: '1.0.0',
     dimensions: 384,
+    maxTokens: 512,
+    onnxFile: 'onnx/model_int8.onnx',
+  },
+  // Not bundled with the package — callers must provide `modelPath` pointing
+  // at a directory containing `onnx/model_int8.onnx` and `tokenizer.json`.
+  'bge-base-en-v1.5': {
+    id: 'bge-base-en-v1.5',
+    weightVersion: '1.0.0',
+    dimensions: 768,
     maxTokens: 512,
     onnxFile: 'onnx/model_int8.onnx',
   },

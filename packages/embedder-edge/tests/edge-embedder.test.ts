@@ -118,11 +118,49 @@ describe('embed / embedMany', () => {
     expect(mockedRun).not.toHaveBeenCalled();
   });
 
-  it('embedMany batches inputs in a single inference call', async () => {
+  it('embedMany issues a single inference call when inputs fit in one batch', async () => {
     const embedder = createEdgeEmbedder();
     const results = await embedder.embedMany(['one', 'two', 'three']);
     expect(results).toHaveLength(3);
     expect(mockedRun).toHaveBeenCalledTimes(1);
     expect(mockedRun.mock.calls[0][1]).toEqual(['one', 'two', 'three']);
+  });
+
+  it('embedMany splits inputs into batches of the default size (32) and preserves order', async () => {
+    const embedder = createEdgeEmbedder();
+    // 50 inputs of distinct lengths so the deterministic mock (v[0] = input.length)
+    // gives each result a unique signature.
+    const inputs = Array.from({ length: 50 }, (_, i) => 'x'.repeat(i + 1));
+    const results = await embedder.embedMany(inputs);
+
+    expect(results).toHaveLength(50);
+    expect(mockedRun).toHaveBeenCalledTimes(2);
+    expect(mockedRun.mock.calls[0][1]).toHaveLength(32);
+    expect(mockedRun.mock.calls[1][1]).toHaveLength(18);
+    // Order preserved across the batch boundary.
+    for (let i = 0; i < inputs.length; i++) {
+      expect(results[i].embedding[0]).toBe(inputs[i].length);
+    }
+  });
+
+  it('embedMany honors a custom batchSize', async () => {
+    const embedder = createEdgeEmbedder({ batchSize: 4 });
+    const inputs = Array.from({ length: 10 }, (_, i) => 'y'.repeat(i + 1));
+    const results = await embedder.embedMany(inputs);
+
+    expect(results).toHaveLength(10);
+    expect(mockedRun).toHaveBeenCalledTimes(3);
+    expect(mockedRun.mock.calls[0][1]).toHaveLength(4);
+    expect(mockedRun.mock.calls[1][1]).toHaveLength(4);
+    expect(mockedRun.mock.calls[2][1]).toHaveLength(2);
+    for (let i = 0; i < inputs.length; i++) {
+      expect(results[i].embedding[0]).toBe(inputs[i].length);
+    }
+  });
+
+  it('createEdgeEmbedder rejects a non-positive batchSize', () => {
+    expect(() => createEdgeEmbedder({ batchSize: 0 })).toThrow(/batchSize/);
+    expect(() => createEdgeEmbedder({ batchSize: -1 })).toThrow(/batchSize/);
+    expect(() => createEdgeEmbedder({ batchSize: 1.5 })).toThrow(/batchSize/);
   });
 });

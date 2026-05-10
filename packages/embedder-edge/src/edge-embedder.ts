@@ -42,6 +42,19 @@ export interface EdgeEmbedderOptions {
    * lower-level exports (`loadOnnxSession`, `runInference`).
    */
   tokenizer?: Tokenizer;
+  /**
+   * Maximum number of inputs per ONNX inference call inside `embedMany`.
+   * Inputs above this size are processed in sequential batches and the
+   * results concatenated in input order.
+   *
+   * Each batch's tokenizer pads only to the longest input within the batch,
+   * so smaller batches reduce both peak memory (intermediate tensors are
+   * `[batch, seqLen, hidden]`) and wasted compute on short chunks. The
+   * default of 32 is a safe ceiling for typical PDF-ingest workloads on
+   * commodity laptops; raise it for throughput on larger machines.
+   * @defaultValue `32`
+   */
+  batchSize?: number;
 }
 
 /**
@@ -96,6 +109,10 @@ export function createEdgeEmbedder(options?: EdgeEmbedderOptions): Embedder {
   const modelId = options?.model ?? 'bge-small-en-v1.5';
   const spec = resolveModel(modelId);
   const modelDir = options?.modelPath ?? defaultBundledPath(modelId);
+  const batchSize = options?.batchSize ?? 32;
+  if (!Number.isInteger(batchSize) || batchSize < 1) {
+    throw new Error(`batchSize must be a positive integer, got ${batchSize}`);
+  }
 
   let sessionPromise: Promise<OnnxSession> | null = null;
   const ensureLoaded = (): Promise<OnnxSession> => {
@@ -122,8 +139,13 @@ export function createEdgeEmbedder(options?: EdgeEmbedderOptions): Embedder {
     async embedMany(inputs: string[]): Promise<EmbedResult[]> {
       if (inputs.length === 0) return [];
       const session = await ensureLoaded();
-      const vectors = await runInference(session, inputs);
-      return vectors.map((embedding) => ({ embedding }));
+      const out: EmbedResult[] = [];
+      for (let i = 0; i < inputs.length; i += batchSize) {
+        const slice = inputs.slice(i, i + batchSize);
+        const vectors = await runInference(session, slice);
+        for (const embedding of vectors) out.push({ embedding });
+      }
+      return out;
     },
   };
 }
