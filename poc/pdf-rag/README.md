@@ -12,8 +12,10 @@ This directory now hosts two related things:
 ```
 PDF Upload ──> LiteParse (extract text per page)
            ──> Paragraph-level chunking (100-500 chars)
-           ──> Embeddings (default: bundled bge-small-en-v1.5 via @trovec/embedder-edge)
-           ──> Trovec vector store (cosine similarity, file-backed)
+           ──> Embeddings (default: bge-base-en-v1.5 via @trovec/embedder-edge,
+                            batched to bound peak memory)
+           ──> Trovec vector store (cosine similarity, file-backed,
+                                    one collection file per embedder dimension)
 
 Question   ──> Trovec semantic search (top-K chunks)
            ──> OpenAI chat completion (synthesize answer with citations)
@@ -25,7 +27,7 @@ Question   ──> Trovec semantic search (top-K chunks)
 | Component | Library | Purpose |
 |-----------|---------|---------|
 | Vector store | `@trovec/core` | Store and query document embeddings (concurrent-safe file storage with optional AES-256-GCM encryption at rest) |
-| Embeddings | `@trovec/embedder-edge` (default) or `@trovec/embedder-openai` | Generate vectors locally (offline, ~12 ms p50) or via cloud API |
+| Embeddings | `@trovec/embedder-edge` (default, `bge-base-en-v1.5`) or `@trovec/embedder-openai` | Generate vectors locally (offline, ~29 ms p50) or via cloud API |
 | PDF parsing | `@llamaindex/liteparse` | Extract text with page-level structure |
 | Answer generation | `openai` chat completions | Synthesize cited answers from retrieved chunks |
 | Web server | `express` | API endpoints + static file serving |
@@ -35,8 +37,9 @@ Question   ──> Trovec semantic search (top-K chunks)
 **Ingestion:**
 - LiteParse extracts text per page from the uploaded PDF
 - Each page is split into paragraph-level chunks (100-500 chars) for more focused embeddings
+- Chunks are embedded in fixed-size batches (32 per ONNX inference call) so peak memory stays bounded even for hundred-page PDFs. The server logs `[ingest] <file>: embedded N/M chunks` between batches.
 - Each chunk stores metadata: page number, source file, full text, and a short preview
-- Data is persisted via Trovec's **concurrent file storage driver** (`createConcurrentFileDriver`), which uses a write-ahead log and OS-level file locking so multiple ingest requests can write safely in parallel
+- Data is persisted via Trovec's **concurrent file storage driver** (`createConcurrentFileDriver`), which uses a write-ahead log and OS-level file locking so multiple ingest requests can write safely in parallel. The collection file name is dimension-aware (`.trovec/trovec-<dim>d.trovec`), so switching embedders never corrupts the previous data — both files coexist on disk.
 - Optionally wrapped with **`withEncryption`** for transparent AES-256-GCM encryption at rest
 
 **Retrieval:**
@@ -59,6 +62,11 @@ Question   ──> Trovec semantic search (top-K chunks)
 ```bash
 cd poc/pdf-rag
 npm install
+
+# One-time fetch of the default bge-base ONNX weights (~110 MB, gitignored, SHA256-verified).
+# Skip this step if you set EDGE_MODEL=bge-small-en-v1.5 (bundled with the package).
+SKIP_OPENAI=1 BENCH_MODEL_FILTER=bge-base-en-v1.5 npm run benchmark
+
 npm start
 ```
 
@@ -67,30 +75,44 @@ Open http://localhost:3737. Upload a PDF, then either:
 - Use the search panel directly — works without an API key.
 - For cited LLM answers, drop an `OPENAI_API_KEY=sk-...` into a `.env` file and restart.
 
-The first request triggers a one-time ONNX session load for the bundled bge-small-en-v1.5 model (~100–500 ms). Subsequent requests are steady-state (~12 ms median per query on a typical laptop).
+The first request triggers a one-time ONNX session load (~500 ms–1 s for bge-base; ~100–500 ms for bge-small). Subsequent requests are steady-state (~29 ms median per query for bge-base, ~12 ms for bge-small, on a typical laptop).
 
 ## Embedder choice
 
-The default is `@trovec/embedder-edge` (offline, in-process, ~32 MB ONNX model bundled with the package). Switch to OpenAI embeddings via env var:
+The default is `@trovec/embedder-edge` with **`bge-base-en-v1.5`** (offline, in-process, ~110 MB INT8 ONNX). On the NIST benchmark it beats `text-embedding-3-small` on retrieval quality (58.1% vs 56.7% recall@1) while staying fully offline.
+
+`bge-base` is **not** shipped in the `@trovec/embedder-edge` tarball (the package only bundles `bge-small`). The POC auto-resolves it from `./bench-models/bge-base-en-v1.5/`, which `npm run benchmark` populates on first run (gitignored, SHA256-verified). One-time setup:
 
 ```bash
-EMBEDDER=openai npm start
+SKIP_OPENAI=1 BENCH_MODEL_FILTER=bge-base-en-v1.5 npm run benchmark
 ```
 
-Trade-offs (numbers from [`BENCHMARK.md`](./BENCHMARK.md)):
+Then start the server normally:
 
-| | `EMBEDDER=edge` (default) | `EMBEDDER=openai` |
-|---|---|---|
-| Setup | None — model bundled with `@trovec/embedder-edge` | Requires `OPENAI_API_KEY` for embeddings *and* answer generation |
-| Network | None for embedding (only for `/api/ask`) | Required for both embedding and `/api/ask` |
-| Quality (recall@1, NIST corpus) | 53.3% (bge-small INT8) | 56.7% (text-embedding-3-small) |
-| Query latency (p50) | ~12 ms | ~400 ms |
-| Bulk-ingest throughput | ~3–8 chunks/sec (CPU inference) | ~37 chunks/sec (API batching) |
-| Per-call cost | $0 | per-token billing |
+```bash
+npm start
+```
 
-For higher local quality, plug in `bge-base-en-v1.5` or `bge-large-en-v1.5` weights via the `modelPath` option (see [`@trovec/embedder-edge`](../../packages/embedder-edge/) README). Both *beat* `text-embedding-3-small` on retrieval quality on this benchmark.
+To use a different model, set `EDGE_MODEL`:
 
-> **Heads up: switching embedders mid-collection produces silent errors.** Different embedders produce vectors in different spaces. Trovec records the embedder identity at ingest time and emits a `console.warn` on mismatch (introduced in `@trovec/core@2.3.0`). If you switch, delete the `.trovec/` directory and re-ingest.
+```bash
+EDGE_MODEL=bge-small-en-v1.5 npm start   # smaller, bundled with the package, no setup
+EDGE_MODEL=bge-large-en-v1.5 npm start   # higher quality, requires bench-models fetch
+EMBEDDER=openai npm start                # switch to OpenAI embeddings
+```
+
+Trade-offs on the NIST benchmark (see [`BENCHMARK.md`](./BENCHMARK.md)):
+
+| | `bge-small` (bundled) | `bge-base` (default) | `bge-large` | `EMBEDDER=openai` |
+|---|---|---|---|---|
+| Setup | None — bundled | One-time bench fetch (~110 MB) | One-time bench fetch (~336 MB) | `OPENAI_API_KEY` |
+| Network | None for embedding | None for embedding | None for embedding | Required |
+| Quality (recall@1) | 53.3% | **58.1%** | **59.8%** | 56.7% |
+| Query latency (p50) | ~12 ms | ~29 ms | ~93 ms | ~400 ms |
+| Ingest throughput | ~8 chunks/s | ~3 chunks/s | ~0.8 chunks/s | ~37 chunks/s |
+| Per-call cost | $0 | $0 | $0 | per-token |
+
+> **Switching embedders is safe.** Each embedder writes to its own dimension-keyed collection file (`.trovec/trovec-<dim>d.trovec`), so prior data is never overwritten or corrupted. When the server detects documents indexed by a previous embedder, the UI shows a yellow "rebuild needed" banner with a one-click re-ingest action (`POST /api/rebuild`). No need to delete `.trovec/`.
 
 ## Usage
 
@@ -131,7 +153,8 @@ Environment variables (can be set in `.env`):
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3737` | Server port |
-| `EMBEDDER` | `edge` | Embedder backend: `edge` (bundled ONNX, offline) or `openai` (cloud API) |
+| `EMBEDDER` | `edge` | Embedder backend: `edge` (local ONNX, offline) or `openai` (cloud API) |
+| `EDGE_MODEL` | `bge-base-en-v1.5` | Edge model id. `bge-small-en-v1.5` is bundled with `@trovec/embedder-edge`; `bge-base-en-v1.5` and `bge-large-en-v1.5` are auto-resolved from `./bench-models/<id>/` (populated by `npm run benchmark`) |
 | `OPENAI_API_KEY` | *(empty)* | Required for `/api/ask` answer generation; also required when `EMBEDDER=openai` |
 | `TROVEC_ENCRYPTION_KEY` | *(optional)* | 64-char hex string (32 raw bytes) — enables AES-256-GCM encryption at rest using a raw key |
 | `TROVEC_ENCRYPTION_PASSWORD` | *(optional)* | Passphrase — enables AES-256-GCM encryption at rest using a PBKDF2-derived key. Ignored if `TROVEC_ENCRYPTION_KEY` is set |
@@ -156,19 +179,21 @@ Save the output as `TROVEC_ENCRYPTION_KEY` in your `.env`. **Losing the key mean
 | `GET` | `/api/search?q=...&topK=5` | Raw semantic search (returns ranked chunks) | Only with `EMBEDDER=openai` |
 | `POST` | `/api/ask` | Ask a question, get a cited answer (JSON body: `{ question, topK? }`) | **Yes — always** (uses LLM) |
 | `GET` | `/api/status` | Vector store stats (entry count, dimensions, metric) | No |
+| `GET` | `/api/rebuild-status` | Reports documents whose entries live in a different collection (e.g., after switching `EDGE_MODEL`) and still have their uploaded file on disk | No |
+| `POST` | `/api/rebuild` | Re-ingest all pending documents through the currently-active embedder. Synchronous; may take minutes on CPU inference for large corpora | Only with `EMBEDDER=openai` |
 
 ## Project Structure
 
 ```
 poc/pdf-rag/
 ├── .env                       # Environment variables (not committed)
-├── .trovec/                   # Persisted vector store data + document registry (auto-created)
+├── .trovec/                   # Persisted vector store + document registry (auto-created; one `trovec-<dim>d.trovec` per embedder dimension)
 ├── package.json
 ├── tsconfig.json
 ├── BENCHMARK.md               # Embedder comparison report (committed)
 ├── BENCHMARK_RESULTS.json     # Latest raw benchmark output (gitignored)
 ├── bench-queries.json         # LLM-paraphrased query cache (gitignored)
-├── bench-models/              # Auto-fetched bench-only ONNX weights (gitignored)
+├── bench-models/              # Auto-fetched ONNX weights for bge-base/bge-large/all-MiniLM, used by the benchmark and by the demo app when `EDGE_MODEL` selects a non-bundled model (gitignored, SHA256-verified)
 ├── uploads/                   # Auto-fetched test PDF + user-uploaded PDFs (gitignored)
 └── src/
     ├── main.ts                # Demo app entry — init Trovec, choose embedder, start server

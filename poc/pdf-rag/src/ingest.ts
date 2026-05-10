@@ -3,6 +3,9 @@ import type { Trovec } from '@trovec/core';
 
 const MIN_CHUNK_LENGTH = 100;
 const MAX_CHUNK_LENGTH = 500;
+// Bound peak memory and give per-batch progress hooks. Mirrors the
+// rationale at poc/pdf-rag/src/benchmark.ts INGEST_BATCH.
+const INGEST_BATCH = 32;
 
 export interface IngestResult {
   fileName: string;
@@ -42,6 +45,9 @@ export async function ingestPdf(
   filePath: string,
   fileName: string,
 ): Promise<IngestResult> {
+  const startedAt = Date.now();
+  console.log(`[ingest] ${fileName}: parsing PDF…`);
+
   const parser = new LiteParse({ ocrEnabled: false });
   const result = await parser.parse(filePath);
 
@@ -66,9 +72,21 @@ export async function ingestPdf(
     },
   }));
 
-  if (entries.length > 0) {
-    await db.addManyWithText(entries);
+  console.log(
+    `[ingest] ${fileName}: embedding ${entries.length} chunks across ${totalPages} pages…`,
+  );
+
+  for (let i = 0; i < entries.length; i += INGEST_BATCH) {
+    const slice = entries.slice(i, i + INGEST_BATCH);
+    await db.addManyWithText(slice);
+    const done = Math.min(i + INGEST_BATCH, entries.length);
+    console.log(`[ingest] ${fileName}: embedded ${done}/${entries.length} chunks`);
   }
+
+  const elapsedSec = ((Date.now() - startedAt) / 1000).toFixed(1);
+  console.log(
+    `[ingest] ${fileName}: done — ${entries.length} chunks across ${totalPages} pages in ${elapsedSec}s`,
+  );
 
   return {
     fileName,

@@ -24,6 +24,32 @@
     .header h1 { font-size: 1.25rem; }
     .header .subtitle { color: #666; font-size: 0.8rem; margin-top: 0.15rem; }
 
+    /* Rebuild banner */
+    .rebuild-banner {
+      display: none;
+      padding: 0.75rem 1.5rem;
+      background: #fff7e6;
+      border-bottom: 1px solid #f4d58d;
+      color: #6b4500;
+      font-size: 0.85rem;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .rebuild-banner.visible { display: flex; }
+    .rebuild-banner .text { flex: 1; }
+    .rebuild-banner .text strong { color: #4a2f00; }
+    .rebuild-banner button {
+      background: #b86a00;
+      color: white;
+      border: none;
+      padding: 0.4rem 0.9rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .rebuild-banner button:hover:not(:disabled) { background: #9c5800; }
+    .rebuild-banner button:disabled { background: #c4a878; cursor: not-allowed; }
+
     /* Layout */
     .layout {
       display: flex;
@@ -283,6 +309,11 @@
     <p class="subtitle">Ask questions about your PDF documents, powered by Trovec</p>
   </div>
 
+  <div class="rebuild-banner" id="rebuildBanner">
+    <div class="text" id="rebuildText"></div>
+    <button id="rebuildBtn" type="button">Rebuild now</button>
+  </div>
+
   <div class="layout">
     <!-- Left panel: Upload + Document list -->
     <div class="left-panel">
@@ -507,8 +538,52 @@
       return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     }
 
+    // Rebuild banner
+    async function refreshRebuildStatus() {
+      try {
+        const res = await fetch('/api/rebuild-status');
+        if (!res.ok) return;
+        const data = await res.json();
+        const banner = document.getElementById('rebuildBanner');
+        const text = document.getElementById('rebuildText');
+        if (data.needsRebuild) {
+          const n = data.pending.length;
+          text.innerHTML = `<strong>${n} document${n === 1 ? '' : 's'} from a previous embedder need to be re-ingested</strong> with the current embedder. Search will not find them until you rebuild.`;
+          banner.classList.add('visible');
+        } else {
+          banner.classList.remove('visible');
+        }
+      } catch (err) {
+        console.warn('rebuild-status failed:', err);
+      }
+    }
+
+    document.getElementById('rebuildBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('rebuildBtn');
+      const text = document.getElementById('rebuildText');
+      btn.disabled = true;
+      const prev = text.innerHTML;
+      text.innerHTML = '<strong>Rebuilding…</strong> This may take a few minutes for large PDFs on CPU inference.';
+      try {
+        const res = await fetch('/api/rebuild', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          text.innerHTML = `<strong>Rebuild complete:</strong> ${data.rebuilt.length} document${data.rebuilt.length === 1 ? '' : 's'} re-ingested${data.failed.length ? `, ${data.failed.length} failed` : ''}.`;
+          await refreshDocuments();
+          setTimeout(refreshRebuildStatus, 1500);
+        } else {
+          text.innerHTML = `<strong>Rebuild failed:</strong> ${data.error ?? 'unknown error'}`;
+          btn.disabled = false;
+        }
+      } catch (err) {
+        text.innerHTML = prev;
+        btn.disabled = false;
+      }
+    });
+
     // Init
     refreshDocuments();
+    refreshRebuildStatus();
   </script>
 </body>
 </html>

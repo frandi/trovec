@@ -10,7 +10,7 @@
   "dependencies": {
     "@llamaindex/liteparse": "^1.4.2",
     "@trovec/core": "^2.3.0",
-    "@trovec/embedder-edge": "^0.2.0",
+    "@trovec/embedder-edge": "^0.3.0",
     "@trovec/embedder-openai": "^2.3.0",
     "dotenv": "^17.3.1",
     "express": "^4.21.0",
