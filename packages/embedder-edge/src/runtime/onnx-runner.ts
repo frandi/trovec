@@ -25,13 +25,22 @@ export interface OnnxSession {
 }
 
 /**
- * Load an ONNX session and the matching tokenizer from a model directory.
- * The directory must contain `tokenizer.json` and the ONNX file named by
- * `spec.onnxFile`.
+ * Load an ONNX session and tokenizer for a model.
+ *
+ * - The ONNX weights are loaded from `<modelDir>/<spec.onnxFile>`.
+ * - The tokenizer is either provided by the caller (e.g., a SentencePiece
+ *   implementation from a community package) or, by default, loaded from
+ *   `<modelDir>/tokenizer.json` as a BERT WordPiece tokenizer.
+ *
+ * The returned session can be passed to {@link runInference}.
  */
-export async function loadOnnxSession(modelDir: string, spec: ModelSpec): Promise<OnnxSession> {
+export async function loadOnnxSession(
+  modelDir: string,
+  spec: ModelSpec,
+  customTokenizer?: Tokenizer,
+): Promise<OnnxSession> {
   const session = await ort.InferenceSession.create(join(modelDir, spec.onnxFile));
-  const tokenizer = await loadTokenizer(join(modelDir, 'tokenizer.json'));
+  const tokenizer = customTokenizer ?? await loadTokenizer(join(modelDir, 'tokenizer.json'));
   return { session, tokenizer, spec };
 }
 

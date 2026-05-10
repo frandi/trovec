@@ -1,6 +1,6 @@
 {
   "name": "@trovec/embedder-edge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Bundled WASM/ONNX text embedder for Trovec. Real semantic embeddings, fully offline, no API keys.",
   "author": "frandi-tech",
   "type": "module",

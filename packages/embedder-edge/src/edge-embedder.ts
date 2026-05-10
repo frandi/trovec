@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Embedder, EmbedResult } from '@trovec/core';
 import { loadOnnxSession, runInference, type OnnxSession } from './runtime/onnx-runner.js';
+import type { Tokenizer } from './runtime/tokenizer.js';
 import { resolveModel, type KnownModel } from './model-registry.js';
 
 export type { KnownModel } from './model-registry.js';
@@ -29,6 +30,18 @@ export interface EdgeEmbedderOptions {
    * @defaultValue `false`
    */
   preload?: boolean;
+  /**
+   * Optional pre-built tokenizer. When provided, the embedder will not
+   * auto-load `tokenizer.json` from the model directory. Use this for
+   * non-WordPiece tokenizers (e.g., SentencePiece) or custom vocabularies.
+   *
+   * The tokenizer must produce the standard BERT-style ONNX feeds
+   * (`input_ids`, `attention_mask`, `token_type_ids`). Models that require
+   * a different ONNX feed structure are not supported through this option
+   * alone — those need a custom inference path built from the package's
+   * lower-level exports (`loadOnnxSession`, `runInference`).
+   */
+  tokenizer?: Tokenizer;
 }
 
 /**
@@ -86,7 +99,7 @@ export function createEdgeEmbedder(options?: EdgeEmbedderOptions): Embedder {
 
   let sessionPromise: Promise<OnnxSession> | null = null;
   const ensureLoaded = (): Promise<OnnxSession> => {
-    sessionPromise ??= loadOnnxSession(modelDir, spec);
+    sessionPromise ??= loadOnnxSession(modelDir, spec, options?.tokenizer);
     return sessionPromise;
   };
 

@@ -285,9 +285,9 @@ const results = await db.queryByText({ text: 'animals sitting', topK: 5 });
 > | Adapter | Default dimensions | Notes |
 > |---------|-------------------|-------|
 > | [`@trovec/embedder-local`](../embedder-local/) | 64 | Trigram hash, zero deps, offline — for testing/demos |
-> | [`@trovec/embedder-edge`](../embedder-edge/) | 384 | Bundled ONNX model (~32 MB), real semantic embeddings, fully offline — recommended default |
-> | [`@trovec/embedder-ollama`](../embedder-ollama/) | 768 | Local Ollama server, no API key — good semantic quality |
-> | [`@trovec/embedder-openai`](../embedder-openai/) | 1536 | OpenAI API — best semantic quality |
+> | [`@trovec/embedder-edge`](../embedder-edge/) | 384 | Bundled ONNX model (~32 MB), competitive with cloud quality on English content, ~32× faster query latency, fully offline |
+> | [`@trovec/embedder-ollama`](../embedder-ollama/) | 768 | Local Ollama server, no API key — multilingual models available |
+> | [`@trovec/embedder-openai`](../embedder-openai/) | 1536 | OpenAI API — fastest bulk ingest, multilingual |
 >
 > See [Writing an Embedder Adapter](#writing-an-embedder-adapter) below for how to create your own.
 

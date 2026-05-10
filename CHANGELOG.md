@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`@trovec/embedder-edge@0.2.0`: tokenizer abstraction + low-level building blocks.** `createEdgeEmbedder` now accepts a `tokenizer?: Tokenizer` option so users can plug in non-WordPiece tokenizers (e.g., SentencePiece) for multilingual or specialized models without forking the package. The package also promotes its runtime primitives to public exports — `loadOnnxSession`, `runInference`, `meanPoolAndNormalize`, `createTokenizer`, `loadTokenizer`, plus the `Tokenizer`, `TokenizerJson`, `EncodeOptions`, `EncodedBatch`, `ModelSpec`, `OnnxSession`, `PoolingInputs` types — so advanced users can compose embedders for non-bundled models or build custom inference paths. Pure additive change; existing users are unaffected.
+
+### Documentation
+
+- **Honest scenario-based recommendation matrix.** `poc/pdf-rag/BENCHMARK.md` rewritten with V3 methodology: NIST SP 800-63B (English-only public-domain PDF, 480 chunks), 480 LLM-paraphrased queries, four local ONNX models (bge-small / bge-base / bge-large / all-MiniLM-L6-v2) compared against `text-embedding-3-small`. Headline finding: bge-base and bge-large both *beat* OpenAI on retrieval quality on English content; bge-small is within ~3 pp of OpenAI at 32× faster query latency. The package README and adapter tables are rewritten accordingly.
+
+---
+
 ## [2.3.0] - 2026-05-09
 
 This release lays the groundwork for an upcoming WASM-backed embedder by adding embedder identity tracking to the persisted file format. The change closes a real footgun on its own — it warns when stored vectors and the current embedder come from different embedding spaces — and ensures users upgrading to a future edge-embedder release have the protection in place from day one. All public APIs remain backward compatible with `2.2.0`.

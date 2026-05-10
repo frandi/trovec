@@ -4,23 +4,39 @@ import {
   createConcurrentFileDriver,
   withEncryption,
 } from '@trovec/core';
-import type { StorageDriver } from '@trovec/core';
+import type { Embedder, StorageDriver } from '@trovec/core';
 import { createOpenAIEmbedder } from '@trovec/embedder-openai';
+import { createEdgeEmbedder } from '@trovec/embedder-edge';
 import { createServer } from './server.js';
 
 config();
 
 const PORT = parseInt(process.env.PORT ?? '3737', 10);
+const EMBEDDER_KIND = (process.env.EMBEDDER ?? 'openai').toLowerCase();
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 const ENCRYPTION_KEY_HEX = process.env.TROVEC_ENCRYPTION_KEY ?? '';
 const ENCRYPTION_PASSWORD = process.env.TROVEC_ENCRYPTION_PASSWORD ?? '';
 
-if (!OPENAI_API_KEY) {
-  console.error('Error: OPENAI_API_KEY is required.');
+let embedder: Embedder;
+let embedderLabel: string;
+if (EMBEDDER_KIND === 'edge') {
+  embedder = createEdgeEmbedder();
+  embedderLabel = `edge (${embedder.model})`;
+} else if (EMBEDDER_KIND === 'openai') {
+  if (!OPENAI_API_KEY) {
+    console.error('Error: OPENAI_API_KEY is required when EMBEDDER=openai.');
+    process.exit(1);
+  }
+  embedder = createOpenAIEmbedder({ apiKey: OPENAI_API_KEY });
+  embedderLabel = `openai (${embedder.model})`;
+} else {
+  console.error(`Error: unsupported EMBEDDER="${EMBEDDER_KIND}". Use "edge" or "openai".`);
   process.exit(1);
 }
 
-const embedder = createOpenAIEmbedder({ apiKey: OPENAI_API_KEY });
+if (!OPENAI_API_KEY) {
+  console.error('Note: OPENAI_API_KEY is required for answer generation. Embeddings will work but /api/answer will fail.');
+}
 
 // Concurrent file driver: safe for multi-process access (file locking + WAL).
 // PDF uploads can write concurrently without corrupting the store.
@@ -48,7 +64,7 @@ const db = await create({
   storageDriver,
 });
 
-console.log('Using OpenAI embedder (text-embedding-3-small)');
+console.log(`Embedder: ${embedderLabel}`);
 console.log('Storage: ConcurrentFileDriver + WAL');
 console.log(`Encryption at rest: ${encryptionLabel}`);
 

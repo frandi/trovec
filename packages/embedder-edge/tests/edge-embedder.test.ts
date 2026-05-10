@@ -69,6 +69,26 @@ describe('createEdgeEmbedder', () => {
     createEdgeEmbedder({ preload: true });
     expect(mockedLoad).toHaveBeenCalledTimes(1);
   });
+
+  it('forwards a custom tokenizer through to loadOnnxSession', async () => {
+    const customTokenizer = {
+      encode: vi.fn(),
+      encodeBatch: vi.fn(),
+      spec: {} as never,
+    };
+    const embedder = createEdgeEmbedder({ tokenizer: customTokenizer });
+    await embedder.embed('hello');
+    expect(mockedLoad).toHaveBeenCalledTimes(1);
+    // Third argument is the optional pre-built tokenizer.
+    expect(mockedLoad.mock.calls[0][2]).toBe(customTokenizer);
+  });
+
+  it('omits the tokenizer argument when none is provided', async () => {
+    const embedder = createEdgeEmbedder();
+    await embedder.embed('hello');
+    expect(mockedLoad).toHaveBeenCalledTimes(1);
+    expect(mockedLoad.mock.calls[0][2]).toBeUndefined();
+  });
 });
 
 describe('embed / embedMany', () => {
